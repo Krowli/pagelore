@@ -22,7 +22,7 @@ from pagelore import write as memory_write
 def run_dev(argv, cwd, input_bytes, home=None) -> subprocess.CompletedProcess:
     """`lore dev <argv>` in a child, lines on stdin, everything else isolated."""
     env = {**os.environ, "PYTHONPATH": str(conftest.REPO / "src"),
-           "PROJECT_MEMORY_NO_REFRESH": "1"}
+           "PAGELORE_NO_REFRESH": "1"}
     if home:
         env["HOME"] = str(home)
         env["USERPROFILE"] = str(home)
@@ -137,7 +137,7 @@ def test_a_real_terminal_gets_the_prompt_and_runs_typed_commands(project, tmp_pa
         os.chdir(project)
         os.environ.update({"HOME": str(home), "USERPROFILE": str(home),
                            "PYTHONPATH": str(conftest.REPO / "src"),
-                           "PROJECT_MEMORY_NO_REFRESH": "1"})
+                           "PAGELORE_NO_REFRESH": "1"})
         os.execv(sys.executable, [sys.executable, "-m", "pagelore", "dev"])
 
     seen = b""

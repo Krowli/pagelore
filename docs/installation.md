@@ -27,14 +27,14 @@ The npm package is a shim, not a port: it finds a Python interpreter and hands i
 the Python source vendored into the tarball at pack time. It runs no `pip` and no
 `postinstall` script, so `--ignore-scripts` and a corporate registry mirror both
 work. It tries `python3` then `python` (on Windows `py -3`, `python`, `python3`);
-to pin one, set `PROJECT_MEMORY_PYTHON` — see [configuration](configuration.md).
+to pin one, set `PAGELORE_PYTHON` — see [configuration](configuration.md).
 If you already have `pipx`, `pipx install pagelore` is the same program and needs
 no Node.
 
 ## From source
 
 ```bash
-git clone https://github.com/Krowli/project-memory && cd project-memory
+git clone https://github.com/Krowli/pagelore && cd pagelore
 make dev                  # .venv with an editable install, pytest and ruff
 .venv/bin/lore --version
 ```
@@ -49,7 +49,7 @@ lore init
 lore doctor
 ```
 
-`lore init` writes the instruction block to `~/.project-memory/AGENT.md` and then
+`lore init` writes the instruction block to `~/.pagelore/AGENT.md` and then
 asks four questions — where it applies, which agents, how they reach it (file or
 MCP), and where this project's pages live. The details, and the flags that answer
 them in a script, are in [connecting agents](agents.md). `lore doctor` checks the
@@ -99,17 +99,43 @@ that cannot load an `@path` does not error, it just stops searching.
   `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`), and — inside a git
   repository — in that project's `CLAUDE.md`, `GEMINI.md` and `AGENTS.md`;
   everything you wrote around the fence stays;
-- the `project-memory` MCP entry in the project's `.mcp.json` (deleted if it is
+- the `pagelore` MCP entry — and a pre-0.6.0 `project-memory` one — in the
+  project's `.mcp.json` (deleted if it is
   then empty), `.gemini/settings.json` and `.cursor/mcp.json`, and in
   `~/.gemini/settings.json` and `~/.cursor/mcp.json` (those files are never
   deleted);
 - for `~/.claude.json` and Codex's `config.toml` it runs `claude mcp remove
-  --scope user project-memory` / `codex mcp remove project-memory` when that
-  program is on PATH, and prints the command when it is not.
+  --scope user pagelore` / `codex mcp remove pagelore` (and the same for
+  `project-memory`) when that program is on PATH, and prints the command when it
+  is not.
 
-`lore uninstall --yes` also removes `~/.project-memory/` (the block, not your
+`lore uninstall --yes` also removes `~/.pagelore/` (the block, not your
 pages). **Your pages are never touched**; delete a `.memory/` directory yourself if
 you mean to.
+
+## Upgrading to 0.6.0: one name
+
+Before 0.6.0 the program was `pagelore` but everything around it was still called
+`project-memory`. 0.6.0 renames the rest; nothing needs doing by hand.
+
+- **`~/.project-memory` becomes `~/.pagelore`.** The first `lore` command after
+  the upgrade (or `lore init`) moves it in one rename and leaves a link at the old
+  path, so a `lore init --store home` project whose `.memory` points into the old
+  directory keeps working. The `@` line `lore init` wrote into `~/.claude/CLAUDE.md`,
+  `~/.gemini/GEMINI.md` and the current project's `CLAUDE.md`/`GEMINI.md` is
+  repointed inside the managed block only. If both directories already exist,
+  nothing is merged and `lore doctor` says so. Set `PAGELORE_HOME` and nothing moves.
+- **`PROJECT_MEMORY_*` variables become `PAGELORE_*`** (`DIR`, `HOME`,
+  `NO_REFRESH`, `NO_FTS5`, `PYTHON`). The old names are still read in 0.6.x, with a
+  one-line warning on stderr; 0.7.0 stops reading them.
+- **The MCP server is registered as `pagelore`.** `lore init --via mcp` replaces a
+  `project-memory` entry that has exactly the shape it wrote; one you edited is left
+  alone, and `lore doctor` names it. Tool names are unchanged, so permission rules
+  and agent definitions change only in the server part:
+  `mcp__project-memory__memory_search` → `mcp__pagelore__memory_search`.
+- **The search index moves to `~/.cache/pagelore/`.** It rebuilds on the next
+  search; `~/.cache/project-memory/` can be deleted.
+- **The repository is `github.com/Krowli/pagelore`.** Old links redirect.
 
 ## Upgrading from 0.3.x
 

@@ -16,7 +16,7 @@ is `FAIL`. `ok` is fine, `--` means not applicable (nothing to check there).
 
 | Line | Meaning | Fix |
 |---|---|---|
-| `ok  ~/.project-memory/AGENT.md` | The instruction block exists. | — |
+| `ok  ~/.pagelore/AGENT.md` | The instruction block exists. | — |
 | `FAIL  … AGENT.md is missing — run lore init` | Nothing for an `@` line to include. | `lore init` |
 
 ### Instruction files (`agent:<name>` and `project:<file>`)
@@ -34,6 +34,7 @@ when they carry the managed block.
 | `FAIL  …: includes … — that file is MISSING, the agent silently loads nothing` | A dangling include: the agent loads nothing and says nothing. | `lore init` |
 | `ok  Codex CLI: pasted copy of 0.5.0` | A pasted block from this version. | — |
 | `FAIL  …: pasted copy of 0.4.1 — STALE, this install is 0.5.0` | Codex and Cursor carry a copy no upgrade can reach. | `lore init` again for that agent; paste again into Cursor's User Rules |
+| `ok  …: includes ~/.project-memory/AGENT.md — the pre-0.6.0 path; …` | Works through the link the 0.6.0 upgrade left behind. | `lore init` for that agent points it at `~/.pagelore` |
 | `FAIL  …: carries a pre-0.4.0 block — run lore init to replace it` | A block from the old shell installer. | `lore init` — it replaces the old marker |
 
 ### MCP registrations (`mcp:<name>`)
@@ -50,6 +51,7 @@ Checked in: the project's `.mcp.json`, then `~/.claude.json` (top-level
 | `ok  …: MCP server in … (command not readable)` | Registered; the command could not be read out of the file. | — |
 | `FAIL  …: MCP server in … → lore mcp — but lore is not on PATH; the harness cannot start it` | The client will fail to start the server, quietly. | Put the install on PATH (`pipx ensurepath`), or re-register with `lore init --command pagelore …` if that is the name you have |
 | `ok  … mcp answers tools/list with memory_search, memory_write` | The server the config names starts and lists both tools. | — |
+| `FAIL  Claude Code: MCP server still registered as project-memory in …` | The pre-0.6.0 server name. It still starts, but an agent given it beside `pagelore` sees every tool twice. | `lore init --via mcp` replaces an entry it wrote; `lore uninstall` removes it; an entry you edited, rename by hand |
 | `FAIL  … mcp did not answer tools/list: …` | The binary the config names is not a working server — often an old install earlier on PATH. | Check `lore --version`; remove the older install |
 
 ### The rest
@@ -63,6 +65,8 @@ Checked in: the project's `.mcp.json`, then `~/.claude.json` (top-level
 | `FAIL  neither lore nor pagelore is on PATH` | Agents cannot run it. | `pipx ensurepath`, or add npm's global bin to PATH |
 | `FAIL  … is a different install (…), not this one (…)` | Two installs; a client starts the first one on PATH. | Uninstall one, or put this one first on PATH |
 | `FAIL  … does not answer --version` | An old build on PATH. | Upgrade or remove it |
+| `FAIL  both ~/.project-memory and ~/.pagelore exist; …` | The 0.6.0 move was refused because the new directory already existed; nothing is merged automatically. | Move what you still need (a `--store home` project's pages) into `~/.pagelore`, then delete `~/.project-memory` |
+| `FAIL  ~/.project-memory is the pre-0.6.0 location; …` | Not moved yet — only with `PAGELORE_NO_REFRESH` set. | `lore init` |
 | `FAIL  ~/.agents/skills/project-memory is left over from the skill-directory layout and is safe to delete` | 0.3.x leftovers. | Delete it; see [upgrading from 0.3.x](installation.md#upgrading-from-03x) |
 
 ## Other problems
@@ -73,13 +77,13 @@ hand-written page is skipped by search while it is under 200 characters and
 flagged while it has no sources.
 
 **The npm `lore` says it cannot find Python.** It lists every interpreter it tried.
-Install Python 3.9+, or set `PROJECT_MEMORY_PYTHON` to one you have; if that
+Install Python 3.9+, or set `PAGELORE_PYTHON` to one you have; if that
 variable is set, nothing else is tried.
 
 **The agent does not search.** Run `lore doctor`. Then start a *new* agent
 session — instruction files are read at session start. On Claude Code with a
 project `CLAUDE.md`, approve the external-import dialog for
-`~/.project-memory/AGENT.md` the first time; if it was declined, the import stays
+`~/.pagelore/AGENT.md` the first time; if it was declined, the import stays
 disabled. With MCP only, Claude Code defers MCP tools behind tool search by
 default; add the instruction file as well (see [MCP](mcp.md#file-mcp-or-both)).
 
@@ -98,9 +102,9 @@ command where the client is installed.
 what to run; see [the write gate](cli.md#lore-write).
 
 **Search is slow or the index looks wrong.** The index is a cache in
-`~/.cache/project-memory/`; delete it and it rebuilds. `PROJECT_MEMORY_NO_FTS5=1`
+`~/.cache/pagelore/`; delete it and it rebuilds. `PAGELORE_NO_FTS5=1`
 bypasses it entirely.
 
 **A page landed in the wrong store.** `lore mcp` prints the store it serves on
-stderr at start. Set `PROJECT_MEMORY_DIR` to be explicit; see
+stderr at start. Set `PAGELORE_DIR` to be explicit; see
 [configuration](configuration.md).

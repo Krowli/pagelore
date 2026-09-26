@@ -36,7 +36,7 @@ import os
 import time
 from pathlib import Path
 
-from .lib import _boot_id, _owner_is_gone, page_paths
+from .lib import _boot_id, _owner_is_gone, env, page_paths
 
 # Bumped when the on-disk shape changes. A mismatch rebuilds.
 SCHEMA_VERSION = 1
@@ -46,7 +46,7 @@ SCHEMA_VERSION = 1
 # are tokenised one way and whose index was built another — zero recall, no error.
 TOKENIZER_VERSION = 1
 
-DISABLE_ENV = "PROJECT_MEMORY_NO_FTS5"
+DISABLE_ENV = "PAGELORE_NO_FTS5"
 BUILD_LOCK = ".index.lock"
 # A builder that dies without releasing must not freeze the index forever. The
 # liveness check covers a killed process; this covers a hung one.
@@ -68,7 +68,7 @@ def fts5_available() -> bool:
     `python3-minimal` ships no `sqlite3` module at all, and a top-level import
     would turn a working search into a traceback on every search.
     """
-    if os.environ.get(DISABLE_ENV):
+    if env(DISABLE_ENV):
         return False
     try:
         import sqlite3
@@ -89,7 +89,7 @@ def fts5_available() -> bool:
 
 def cache_root() -> Path:
     base = os.environ.get("XDG_CACHE_HOME")
-    return (Path(base) if base else Path.home() / ".cache") / "project-memory"
+    return (Path(base) if base else Path.home() / ".cache") / "pagelore"
 
 
 def index_path(store: Path) -> Path:

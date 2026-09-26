@@ -37,6 +37,8 @@ from pathlib import Path
 from . import __version__, instructions
 from .cli import add_version
 from .init import (
+    MCP_LEGACY,
+    MCP_SERVER,
     PROJECT_FILES,
     PROJECT_READERS,
     _project_root,
@@ -51,7 +53,8 @@ from .lib import find_store, page_paths
 LEGACY_SKILL = Path.home() / ".agents" / "skills" / "project-memory"
 
 
-def _mcp_registrations(root: Path | None) -> dict[str, tuple[Path, str | None]]:
+def _mcp_registrations(root: Path | None,
+                       name: str = MCP_SERVER) -> dict[str, tuple[Path, str | None]]:
     """Per agent: the file our server is registered in and the command it names.
 
     Read-only, and reading is fine where writing was not: ~/.claude.json and
@@ -69,12 +72,12 @@ def _mcp_registrations(root: Path | None) -> dict[str, tuple[Path, str | None]]:
     found: dict[str, tuple[Path, str | None]] = {}
     for key, candidates in files.items():
         for path in candidates:
-            entry = registered_in_json(_read_json(path) or {})
+            entry = registered_in_json(_read_json(path) or {}, name)
             if entry is not None:
                 found[key] = (path, entry.get("command") or None)
                 break
     config = codex_home() / "config.toml"
-    command = codex_registered(config)
+    command = codex_registered(config, name)
     if command is not None:
         found["codex"] = (config, command or None)
     return found
@@ -161,10 +164,30 @@ def _block_finding(check: str, label: str, text: str, kind: str) -> dict:
                                               " run `lore init` again")}
     pointed = re.search(r"^@(\S+)", text[text.find(instructions.MARK_BEGIN):], re.M)
     target_ok = bool(pointed) and Path(pointed.group(1)).is_file()
+    # Still resolves through the link a 0.6.0 upgrade leaves at the old path, so it
+    # is not a failure; it is one `lore init` away from not depending on the link.
+    old = bool(pointed) and instructions.LEGACY_HOME_DIRNAME in Path(pointed.group(1)).parts
     return {"check": check, "ok": target_ok,
             "detail": f"{label}: includes {pointed.group(1) if pointed else '?'}"
                       + ("" if target_ok else " — that file is MISSING, the agent"
-                                              " silently loads nothing; run `lore init`")}
+                                              " silently loads nothing; run `lore init`")
+                      + (" — the pre-0.6.0 path; `lore init` points it at"
+                         f" {instructions.block_path()}" if target_ok and old else "")}
+
+
+def _home_findings() -> list[dict]:
+    """A pre-0.6.0 `~/.project-memory` that was not moved. Every command moves it
+    on its own, so one still here as a real directory means the move was refused:
+    the new one already existed, and two directories are not merged by a program."""
+    old, new = instructions.legacy_home(), instructions.home()
+    if old.is_symlink() or not old.is_dir() or old == new:
+        return []
+    if new.exists():
+        return [{"check": "home", "ok": False,
+                 "detail": f"both {old} and {new} exist; {new} is the one in use. Move"
+                           f" anything you still need out of {old}, then delete it"}]
+    return [{"check": "home", "ok": False,
+             "detail": f"{old} is the pre-0.6.0 location; `lore init` moves it to {new}"}]
 
 
 def _has_block(text: str) -> bool:
@@ -246,6 +269,14 @@ def findings() -> list[dict]:
                     "detail": f"{shake[0]} mcp answers tools/list with {detail}" if ok
                               else f"{shake[0]} mcp did not answer tools/list: {detail}"})
 
+    # The pre-0.6.0 server name. It still starts, but `init` now registers `pagelore`,
+    # and an agent given both gets every tool twice.
+    for key, (path, _) in _mcp_registrations(root, MCP_LEGACY).items():
+        out.append({"check": f"mcp-legacy:{key}", "ok": False,
+                    "detail": f"{agents[key][0]}: MCP server still registered as"
+                              f" `{MCP_LEGACY}` in {path} — `lore init --via mcp` replaces"
+                              " the entry it wrote, `lore uninstall` removes it"})
+
     out.append({"check": "connected", "ok": connected > 0,
                 "detail": f"{connected} agent(s) connected"
                           + ("" if connected else " — nothing tells any agent the memory exists")})
@@ -264,6 +295,8 @@ def findings() -> list[dict]:
     else:
         ok, detail = _same_install(command, here)
         out.append({"check": "command", "ok": ok, "detail": detail})
+
+    out.extend(_home_findings())
 
     if LEGACY_SKILL.exists():
         out.append({"check": "legacy", "ok": False,

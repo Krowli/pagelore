@@ -133,6 +133,6 @@ If you skip the first step you get two instruction blocks, and the older one
 points at a directory that is gone. Nothing errors: an agent that cannot load an
 `@path` simply stops searching, silently.
 
-  https://github.com/Krowli/project-memory
+  https://github.com/Krowli/pagelore
 MSG
 exit 1

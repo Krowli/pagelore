@@ -92,7 +92,7 @@ def main(argv=None) -> int:
             store = harness.materialise(grown(corpus, size), Path(tmp))
             search = [*head, "search", "--store", str(store), *QUERY]
             warm_env = dict(os.environ)
-            cold_env = dict(os.environ, PROJECT_MEMORY_NO_FTS5="1")
+            cold_env = dict(os.environ, PAGELORE_NO_FTS5="1")
             subprocess.run(search, capture_output=True, env=warm_env)   # build the index
             warm = median_ms(search, warm_env)
             cold = median_ms(search, cold_env)

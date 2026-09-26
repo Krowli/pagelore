@@ -45,7 +45,7 @@ jobs:
       # Python without sqlite3 — is never executed and rots undetected.
       - name: Run tests (fallback, index disabled)
         env:
-          PROJECT_MEMORY_NO_FTS5: "1"
+          PAGELORE_NO_FTS5: "1"
         run: pytest
 
   lint:
@@ -169,7 +169,7 @@ jobs:
           python -c "import json,sys; ls=[json.loads(l) for l in open('out.jsonl') if l.strip()]; \
             assert len(ls)==2, ls; assert {t['name'] for t in ls[1]['result']['tools']}=={'memory_search','memory_write'}, ls"
           lore init --scope project --agent claude --via mcp --yes
-          grep -q '"project-memory"' .mcp.json
+          grep -q '"pagelore"' .mcp.json
           lore doctor --json > doctor.json
           python -c "import json; f={r['check']:r for r in json.load(open('doctor.json'))['findings']}; \
             assert f['mcp:claude']['ok'] is True, f['mcp:claude']; assert f['mcp:handshake']['ok'] is True, f['mcp:handshake']"
@@ -266,8 +266,8 @@ jobs:
       - name: A named interpreter that does not exist fails loudly
         run: |
           set -euo pipefail
-          if PROJECT_MEMORY_PYTHON=/nonexistent/python lore --version 2>err.txt; then
-            echo "::error::a broken PROJECT_MEMORY_PYTHON was silently ignored"; exit 1
+          if PAGELORE_PYTHON=/nonexistent/python lore --version 2>err.txt; then
+            echo "::error::a broken PAGELORE_PYTHON was silently ignored"; exit 1
           fi
           grep -q "so nothing else was tried" err.txt || { cat err.txt; exit 1; }
 
@@ -275,7 +275,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '#!/bin/sh\nexit 69\n' > /tmp/too-old && chmod +x /tmp/too-old
-          if PROJECT_MEMORY_PYTHON=/tmp/too-old lore --version 2>err.txt; then
+          if PAGELORE_PYTHON=/tmp/too-old lore --version 2>err.txt; then
             echo "::error::exit 69 was treated as success"; exit 1
           fi
           grep -q "older than Python" err.txt || { cat err.txt; exit 1; }

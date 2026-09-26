@@ -97,7 +97,7 @@ print(f"   tools/list answered {sorted(t['name'] for t in ls[1]['result']['tools
 PY
 
 run "$LORE" init --scope project --agent claude --via mcp --yes
-grep -q '"project-memory"' "$WORK/.mcp.json" || fail "init did not register the MCP server"
+grep -q '"pagelore"' "$WORK/.mcp.json" || fail "init did not register the MCP server"
 run "$LORE" doctor --json > "$TMP/doctor.json"
 "$PYTHON" - "$TMP/doctor.json" <<'PY'
 import json, sys

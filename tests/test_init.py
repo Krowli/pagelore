@@ -38,13 +38,13 @@ def machine(tmp_path, monkeypatch):
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     # `Path.home()` reads HOME on POSIX and USERPROFILE on Windows, so faking only
     # HOME leaves the Windows runs pointed at the real home directory. `--store home`
-    # then created `C:\Users\runneradmin\.project-memory` on a CI machine, which is
+    # then created `C:\Users\runneradmin\.pagelore` on a CI machine, which is
     # how this was found: the assertion below that the target sits under the fake home.
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.delenv("HOMEDRIVE", raising=False)
     monkeypatch.delenv("HOMEPATH", raising=False)
-    monkeypatch.setenv(instructions.HOME_ENV, str(home / ".project-memory"))
+    monkeypatch.setenv(instructions.HOME_ENV, str(home / ".pagelore"))
     monkeypatch.setenv(instructions.NO_REFRESH_ENV, "1")
     monkeypatch.chdir(project)
     # Codex's files follow CODEX_HOME; a developer's own must not leak in.
@@ -205,7 +205,7 @@ def test_project_scope_outside_a_repository_says_so_instead_of_guessing(tmp_path
     loose.mkdir()
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
-    monkeypatch.setenv(instructions.HOME_ENV, str(home / ".project-memory"))
+    monkeypatch.setenv(instructions.HOME_ENV, str(home / ".pagelore"))
     monkeypatch.setenv(instructions.NO_REFRESH_ENV, "1")
     monkeypatch.chdir(loose)
 
@@ -281,24 +281,24 @@ def test_uninstall_never_deletes_gemini_settings(machine):
 def test_uninstall_prints_the_harness_remove_command_it_cannot_run(machine, capsys):
     home, _ = machine
     claude_json = home / ".claude.json"
-    claude_json.write_text(json.dumps({"mcpServers": {"project-memory": {"command": "lore"}}}),
+    claude_json.write_text(json.dumps({"mcpServers": {"pagelore": {"command": "lore"}}}),
                            encoding="utf-8")
     (home / ".codex").mkdir()
     config = home / ".codex" / "config.toml"
-    config.write_text('[mcp_servers.project-memory]\ncommand = "lore"\n', encoding="utf-8")
+    config.write_text('[mcp_servers.pagelore]\ncommand = "lore"\n', encoding="utf-8")
     before = claude_json.read_bytes(), config.read_bytes()
 
     assert uninstall.main([]) == 0               # which → None: nothing to run it with
     out = capsys.readouterr().out
-    assert "claude mcp remove --scope user project-memory" in out
-    assert "codex mcp remove project-memory" in out
+    assert "claude mcp remove --scope user pagelore" in out
+    assert "codex mcp remove pagelore" in out
     assert (claude_json.read_bytes(), config.read_bytes()) == before, "it edited a file it must not"
 
 
 def test_uninstall_runs_the_harness_remove_when_it_is_there(machine, monkeypatch):
     home, project = machine
     (home / ".claude.json").write_text(
-        json.dumps({"mcpServers": {"project-memory": {"command": "lore"}}}), encoding="utf-8")
+        json.dumps({"mcpServers": {"pagelore": {"command": "lore"}}}), encoding="utf-8")
     ran = []
 
     def fake_run(argv, *a, **k):
@@ -308,7 +308,7 @@ def test_uninstall_runs_the_harness_remove_when_it_is_there(machine, monkeypatch
     monkeypatch.setattr(init.subprocess, "run", fake_run)
     monkeypatch.setattr(shutil, "which", lambda name, *a, **k: "/fake/claude" if name == "claude" else None)
     assert uninstall.main([]) == 0
-    assert ran == [["/fake/claude", "mcp", "remove", "--scope", "user", "project-memory"]]
+    assert ran == [["/fake/claude", "mcp", "remove", "--scope", "user", "pagelore"]]
 
 
 def test_doctor_calls_nothing_connected_a_fault(machine):
@@ -457,9 +457,9 @@ def test_doctor_flags_a_command_that_will_not_answer_version(machine, monkeypatc
 
 
 def test_the_real_handshake_lists_the_two_tools(machine, monkeypatch):
-    """`machine` is load-bearing here: its NO_REFRESH and PROJECT_MEMORY_HOME reach
+    """`machine` is load-bearing here: its NO_REFRESH and PAGELORE_HOME reach
     the child, or the router's housekeeping after `lore mcp` exits would rewrite the
-    developer's real ~/.project-memory/AGENT.md with this tree's text."""
+    developer's real ~/.pagelore/AGENT.md with this tree's text."""
     monkeypatch.setenv("PYTHONPATH", str(REPO / "src"))
     ok, detail = doctor._handshake([*conftest.LORE])
     assert ok is True, detail
@@ -486,7 +486,7 @@ def test_doctor_ignores_a_local_scope_entry_of_another_project_in_claude_json(ma
     after an entry it never wrote."""
     home, _ = machine
     (home / ".claude.json").write_text(json.dumps({"projects": {"/elsewhere": {
-        "mcpServers": {"project-memory": {"type": "stdio", "command": "lore"}}}}}),
+        "mcpServers": {"pagelore": {"type": "stdio", "command": "lore"}}}}}),
         encoding="utf-8")
     rows = {row["check"]: row for row in doctor.findings()}
     assert rows["mcp:claude"]["ok"] is None
@@ -494,7 +494,7 @@ def test_doctor_ignores_a_local_scope_entry_of_another_project_in_claude_json(ma
 
 def test_doctor_reads_a_user_scope_entry_from_claude_json(machine, monkeypatch):
     home, _ = machine
-    (home / ".claude.json").write_text(json.dumps({"mcpServers": {"project-memory": {
+    (home / ".claude.json").write_text(json.dumps({"mcpServers": {"pagelore": {
         "type": "stdio", "command": "lore", "args": ["mcp"]}}}), encoding="utf-8")
     monkeypatch.setattr(shutil, "which", lambda name, *a, **k: sys.executable)
     monkeypatch.setattr(doctor, "_handshake", lambda argv: (True, ""))
@@ -507,8 +507,8 @@ def test_doctor_reads_codex_config_toml_without_a_toml_parser(machine, monkeypat
     home, _ = machine
     (home / ".codex").mkdir()
     (home / ".codex" / "config.toml").write_text(
-        'model = "x"\n\n[mcp_servers.project-memory]\ncommand = "lore"\nargs = ["mcp"]\n\n'
-        '[mcp_servers.project-memory.env]\nA = "1"\n', encoding="utf-8")
+        'model = "x"\n\n[mcp_servers.pagelore]\ncommand = "lore"\nargs = ["mcp"]\n\n'
+        '[mcp_servers.pagelore.env]\nA = "1"\n', encoding="utf-8")
     monkeypatch.setattr(shutil, "which", lambda name, *a, **k: sys.executable)
     monkeypatch.setattr(doctor, "_handshake", lambda argv: (True, ""))
     rows = {row["check"]: row for row in doctor.findings()}
@@ -522,7 +522,7 @@ def test_doctor_reads_codex_config_toml_without_a_toml_parser(machine, monkeypat
 # 2 Gemini, 3 Codex, 4 Cursor, 5 none), via (1 file, 2 MCP, "1 2" both, empty = file),
 # confirm, store.
 
-MCP_ADD_CLAUDE = "claude mcp add --transport stdio --scope user project-memory -- lore mcp"
+MCP_ADD_CLAUDE = "claude mcp add --transport stdio --scope user pagelore -- lore mcp"
 
 
 def mcp_json(path: Path) -> dict:
@@ -536,7 +536,7 @@ def test_mcp_for_claude_in_this_project_writes_mcp_json(machine):
     _, out = run("1\n1\n2\ny\n1\n")
     target = project / ".mcp.json"
     assert str(target) in out, "the preview did not name the file it wrote"
-    assert mcp_json(target)["mcpServers"]["project-memory"] == \
+    assert mcp_json(target)["mcpServers"]["pagelore"] == \
         {"type": "stdio", "command": "lore", "args": ["mcp"]}
     local = project / "CLAUDE.md"
     assert not local.exists() or instructions.MARK_BEGIN not in local.read_text(encoding="utf-8")
@@ -546,7 +546,7 @@ def test_both_methods_write_both(machine):
     _, project = machine
     run("1\n1\n1 2\ny\n1\n")
     assert instructions.MARK_BEGIN in (project / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "project-memory" in mcp_json(project / ".mcp.json")["mcpServers"]
+    assert "pagelore" in mcp_json(project / ".mcp.json")["mcpServers"]
 
 
 def test_an_empty_answer_keeps_the_instruction_file(machine):
@@ -565,7 +565,7 @@ def test_mcp_json_merge_keeps_what_was_there_and_is_idempotent(machine):
     _, out = run("1\n1\n2\ny\n1\n")
     doc = mcp_json(target)
     assert doc["keep"] == 1 and doc["mcpServers"]["other"] == {"command": "x"}
-    assert doc["mcpServers"]["project-memory"]["args"] == ["mcp"]
+    assert doc["mcpServers"]["pagelore"]["args"] == ["mcp"]
     assert "  updated   " in out
 
     before = target.read_bytes()
@@ -591,14 +591,14 @@ def test_gemini_project_scope_writes_settings_json_without_a_type_field(machine)
     """Gemini's stdio entry has no `type`; its schema does not know the field."""
     _, project = machine
     run("1\n2\n2\ny\n1\n")
-    entry = mcp_json(project / ".gemini" / "settings.json")["mcpServers"]["project-memory"]
+    entry = mcp_json(project / ".gemini" / "settings.json")["mcpServers"]["pagelore"]
     assert entry == {"command": "lore", "args": ["mcp"]}
 
 
 def test_gemini_global_scope_writes_the_home_settings(machine):
     home, _ = machine
     run("2\n2\n2\ny\n1\n")
-    entry = mcp_json(home / ".gemini" / "settings.json")["mcpServers"]["project-memory"]
+    entry = mcp_json(home / ".gemini" / "settings.json")["mcpServers"]["pagelore"]
     assert entry["command"] == "lore"
 
 
@@ -620,7 +620,7 @@ def test_claude_global_scope_runs_the_harness_command_after_confirming(machine, 
 
     _, out = run("2\n1\n2\ny\n1\n")
     assert ran == [["/fake/claude", "mcp", "add", "--transport", "stdio", "--scope", "user",
-                    "project-memory", "--", "lore", "mcp"]]
+                    "pagelore", "--", "lore", "mcp"]]
     assert "  added     " in out and "via claude mcp add" in out
 
 
@@ -649,7 +649,7 @@ def test_codex_mcp_is_global_whatever_the_scope(machine):
     _, project = machine
     _, out = run("", argv=["--scope", "project", "--agent", "codex", "--via", "mcp", "--yes"],
                  interactive=False)
-    assert "codex mcp add project-memory -- lore mcp" in out
+    assert "codex mcp add pagelore -- lore mcp" in out
     assert not (project / ".mcp.json").exists()
 
 
@@ -677,7 +677,7 @@ def test_the_command_flag_reaches_the_mcp_entry(machine):
     _, project = machine
     run("", argv=["--scope", "project", "--agent", "claude", "--via", "mcp",
                   "--command", "pagelore", "--yes"], interactive=False)
-    assert mcp_json(project / ".mcp.json")["mcpServers"]["project-memory"]["command"] == "pagelore"
+    assert mcp_json(project / ".mcp.json")["mcpServers"]["pagelore"]["command"] == "pagelore"
 
 
 def test_mcp_only_on_claude_code_says_what_was_measured(machine):
@@ -724,7 +724,7 @@ def test_it_asks_with_arrow_keys_on_a_real_terminal(tmp_path):
         os.chdir(project)
         os.environ.update({"HOME": str(home), "USERPROFILE": str(home),
                            "PYTHONPATH": str(REPO / "src"),
-                           instructions.HOME_ENV: str(home / ".project-memory"),
+                           instructions.HOME_ENV: str(home / ".pagelore"),
                            instructions.NO_REFRESH_ENV: "1"})
         os.execv(sys.executable, [sys.executable, "-m", "pagelore", "init"])
 
@@ -790,7 +790,7 @@ def test_the_fourth_question_is_asked_with_arrows_on_a_real_terminal(tmp_path):
         os.chdir(project)
         os.environ.update({"HOME": str(home), "USERPROFILE": str(home),
                            "PYTHONPATH": str(REPO / "src"), "PATH": "/usr/bin:/bin",
-                           instructions.HOME_ENV: str(home / ".project-memory"),
+                           instructions.HOME_ENV: str(home / ".pagelore"),
                            instructions.NO_REFRESH_ENV: "1"})
         os.execv(sys.executable, [sys.executable, "-m", "pagelore", "init"])
 
@@ -899,14 +899,14 @@ def test_cursor_mcp_in_this_project_writes_cursor_mcp_json(machine):
     _, project = machine
     run("", argv=["--scope", "project", "--agent", "cursor", "--via", "mcp", "--yes"],
         interactive=False)
-    entry = mcp_json(project / ".cursor" / "mcp.json")["mcpServers"]["project-memory"]
+    entry = mcp_json(project / ".cursor" / "mcp.json")["mcpServers"]["pagelore"]
     assert entry == {"type": "stdio", "command": "lore", "args": ["mcp"]}
 
 
 def test_cursor_mcp_globally_writes_the_home_file(machine):
     home, _ = machine
     run("", argv=["--agent", "cursor", "--via", "mcp", "--yes"], interactive=False)
-    assert "project-memory" in mcp_json(home / ".cursor" / "mcp.json")["mcpServers"]
+    assert "pagelore" in mcp_json(home / ".cursor" / "mcp.json")["mcpServers"]
 
 
 def test_uninstall_takes_cursor_out_and_keeps_its_file(machine):

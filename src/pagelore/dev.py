@@ -107,7 +107,7 @@ def run_line(line: str, cwd: Path, sandbox: Path | None, home: Path | None) -> N
     cmd = [sys.executable, "-m", "pagelore", *argv]
     env = os.environ.copy()
     if sandbox is not None:
-        env["PROJECT_MEMORY_DIR"] = str(sandbox / STORE_DIRNAME)
+        env["PAGELORE_DIR"] = str(sandbox / STORE_DIRNAME)
         if home is not None:
             env["HOME"] = str(home)
             env["USERPROFILE"] = str(home)

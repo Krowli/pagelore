@@ -207,7 +207,7 @@ Six decisions, each bought by a probe rather than a preference:
   does not work over a network filesystem — which is exactly what
   `install.sh --store home` invites on a corporate or cloud-synced home directory.
   The default rollback journal reads fine in a `0555` directory.
-- **The index lives outside the store**, in `$XDG_CACHE_HOME/project-memory/`,
+- **The index lives outside the store**, in `$XDG_CACHE_HOME/pagelore/`,
   keyed by a hash of the store's resolved path. Inside the store it would be
   committed in `tracked` mode, and a store created before this feature existed
   would never receive a new `.gitignore` line. Resolving the path first means the

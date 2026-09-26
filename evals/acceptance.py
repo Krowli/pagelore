@@ -97,10 +97,10 @@ def build_project(directory: Path, pointer: str) -> Path:
     if pointer in ("mcp", "mcp+include"):
         # Nothing tells the model the memory exists except the tool list, which
         # is the whole point of the comparison.
-        (project / ".mcp.json").write_text(json.dumps({"mcpServers": {"project-memory": {
+        (project / ".mcp.json").write_text(json.dumps({"mcpServers": {"pagelore": {
             "type": "stdio", "command": sys.executable,
             "args": [str(HERE / "mcp_probe.py")],
-            "env": {"PROJECT_MEMORY_DIR": str(project / ".memory")},
+            "env": {"PAGELORE_DIR": str(project / ".memory")},
         }}}, indent=2), encoding="utf-8")
     return project
 

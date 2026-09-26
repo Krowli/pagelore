@@ -6,7 +6,7 @@ lore <command> [flags]        lore <command> --help for one command's flags
 
 `pagelore` is the same program under a second name. Every command takes
 `--version` and `-h/--help`. Commands that read or write a store take
-`--store PATH`; without it the store is `$PROJECT_MEMORY_DIR`, else the nearest
+`--store PATH`; without it the store is `$PAGELORE_DIR`, else the nearest
 `.memory/` at or above the current directory (see [configuration](configuration.md)).
 
 A bare `lore` prints the command list and exits 0, because an agent checking
@@ -183,8 +183,8 @@ and under `--json` the same lines come back as `changes`:
 ```json
 {
   "version": "0.5.0",
-  "block": "/home/you/.project-memory/AGENT.md",
-  "line": "@/home/you/.project-memory/AGENT.md",
+  "block": "/home/you/.pagelore/AGENT.md",
+  "line": "@/home/you/.pagelore/AGENT.md",
   "scope": "project",
   "project": "/home/you/src/app",
   "agents": ["claude"],
@@ -219,7 +219,7 @@ lore uninstall [--yes]
 
 Takes out what `lore init` wrote — see
 [installation](installation.md#uninstalling). `--yes` also removes
-`~/.project-memory/` (the block, not your pages).
+`~/.pagelore/` (the block, not your pages).
 
 ### `lore mcp`
 

@@ -53,7 +53,9 @@ the replacement.
 `project-memory` and `pm` were both already taken on PyPI and npm by unrelated
 products in the same niche. `pagelore` is also installed as a command, for a
 machine where something else already owns `lore`; every message names whichever
-you ran. The repository and the MCP server keep the name `project-memory`.
+you ran. Since 0.6.0 everything else carries the same name: the repository, the
+MCP server, `~/.pagelore` and the `PAGELORE_*` variables; see
+[upgrading to 0.6.0](installation.md#upgrading-to-060-one-name).
 
 **I used 0.3.x.**
 It installed a skill directory that is gone now; see

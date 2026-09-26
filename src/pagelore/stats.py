@@ -98,7 +98,7 @@ def summarise(records: list[dict]) -> dict:
 
 
 def main(argv: list[str] | None = None, *, prog: str = "lore stats") -> int:
-    ap = argparse.ArgumentParser(prog=prog, description="Summarise the project-memory log.")
+    ap = argparse.ArgumentParser(prog=prog, description="Summarise the memory log.")
     add_version(ap)
     ap.add_argument("--store", type=Path, default=None)
     ap.add_argument("--since", default=None, help="ISO date, e.g. 2026-08-09")

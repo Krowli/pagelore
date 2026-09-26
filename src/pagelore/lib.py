@@ -13,7 +13,13 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-STORE_ENV = "PROJECT_MEMORY_DIR"
+STORE_ENV = "PAGELORE_DIR"
+# Every variable this program reads was called PROJECT_MEMORY_* before 0.6.0, when
+# the product still had two names. The old spelling is read as a fallback, with a
+# warning on stderr, for one minor release; 0.7.0 drops it. See `env`.
+ENV_PREFIX = "PAGELORE_"
+LEGACY_ENV_PREFIX = "PROJECT_MEMORY_"
+_warned_env: set[str] = set()
 STORE_DIRNAME = ".memory"
 LOG_NAME = ".log.jsonl"
 # One O_APPEND write is atomic against other processes on POSIX, and is not on
@@ -52,9 +58,29 @@ class StoreUnavailable(Exception):
     """
 
 
+def env(name: str) -> str | None:
+    """`$PAGELORE_<X>`, else the pre-0.6.0 `$PROJECT_MEMORY_<X>`, else None.
+
+    The old name still works for this minor release so that a shell profile or an
+    MCP config written for 0.5 does not silently stop applying on upgrade. It says so
+    once per process, on stderr: stdout is `--json` output or an MCP stream, and a
+    line there would corrupt it.
+    """
+    value = os.environ.get(name)
+    if value:
+        return value
+    old = LEGACY_ENV_PREFIX + name[len(ENV_PREFIX):]
+    value = os.environ.get(old)
+    if value and old not in _warned_env:
+        _warned_env.add(old)
+        print(f"pagelore: {old} is deprecated, use {name}; the old name stops working "
+              "in 0.7.0", file=sys.stderr)
+    return value or None
+
+
 def find_store(start: Path | None = None) -> Path:
-    """Locate the memory store: $PROJECT_MEMORY_DIR, else nearest .memory/ upward."""
-    override = os.environ.get(STORE_ENV)
+    """Locate the memory store: $PAGELORE_DIR, else nearest .memory/ upward."""
+    override = env(STORE_ENV)
     if override:
         return Path(override).expanduser().resolve()
     cur = (start or Path.cwd()).resolve()
@@ -285,7 +311,7 @@ def ensure_store(store: Path) -> None:
             return
         prefix = "" if (not existing or existing.endswith("\n")) else "\n"
         with gitignore.open("a", encoding="utf-8") as fh:
-            fh.write(f"{prefix}\n# project-memory: notes stay local\n{store.name}/\n")
+            fh.write(f"{prefix}\n# pagelore: notes stay local\n{store.name}/\n")
     except OSError:
         # A read-only checkout should not stop the write; the pages still land.
         pass

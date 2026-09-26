@@ -38,11 +38,11 @@ dependencies = []          # runtime is stdlib-only, on purpose
 dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [project.urls]
-Homepage = "https://github.com/Krowli/project-memory"
-Documentation = "https://github.com/Krowli/project-memory/tree/main/docs"
-Repository = "https://github.com/Krowli/project-memory"
-Changelog = "https://github.com/Krowli/project-memory/blob/main/CHANGELOG.md"
-Issues = "https://github.com/Krowli/project-memory/issues"
+Homepage = "https://github.com/Krowli/pagelore"
+Documentation = "https://github.com/Krowli/pagelore/tree/main/docs"
+Repository = "https://github.com/Krowli/pagelore"
+Changelog = "https://github.com/Krowli/pagelore/blob/main/CHANGELOG.md"
+Issues = "https://github.com/Krowli/pagelore/issues"
 
 # Two names for one program. `lore` is the documented one; `pagelore` is the escape
 # hatch for a machine where something else already owns three letters in the most

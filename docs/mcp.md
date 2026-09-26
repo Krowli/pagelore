@@ -17,7 +17,7 @@ before stating anything about the project, write after a decision or a
 non-obvious fix — because the two routes were compared on that promise.
 
 Protocol details: JSON-RPC 2.0, one message per line on stdin and stdout,
-protocol version `2025-06-18`, server name `project-memory`. stdout carries
+protocol version `2025-06-18`, server name `pagelore`. stdout carries
 JSON-RPC and nothing else; the server prints one line on stderr naming the store
 it serves.
 
@@ -37,7 +37,7 @@ in the words the file uses, and the two cannot drift. About 1.2k characters;
 A stdio server is promised no working directory, so `lore mcp` resolves the store
 once at start, in this order:
 
-1. `PROJECT_MEMORY_DIR`, if set;
+1. `PAGELORE_DIR`, if set;
 2. the project Claude Code names in `CLAUDE_PROJECT_DIR` — the nearest `.memory/`
    at or above it;
 3. the nearest `.memory/` at or above the directory it was started in.
@@ -54,9 +54,9 @@ person's home, so a committed `.mcp.json` works for the next person to clone;
 | Client | Scope | Where | How `lore init` does it |
 |---|---|---|---|
 | Claude Code | project | `.mcp.json` in the repository, meant to be committed | merges the entry into the JSON |
-| Claude Code | every project | `~/.claude.json` | runs `claude mcp add --transport stdio --scope user project-memory -- lore mcp`, or prints it when `claude` is not on PATH |
+| Claude Code | every project | `~/.claude.json` | runs `claude mcp add --transport stdio --scope user pagelore -- lore mcp`, or prints it when `claude` is not on PATH |
 | Gemini CLI | project / every project | `.gemini/settings.json` / `~/.gemini/settings.json` | merges the entry into the JSON |
-| Codex CLI | every project | `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) | runs `codex mcp add project-memory -- lore mcp`, or prints it |
+| Codex CLI | every project | `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) | runs `codex mcp add pagelore -- lore mcp`, or prints it |
 | Cursor | project / every project | `.cursor/mcp.json` / `~/.cursor/mcp.json` | merges the entry into the JSON |
 
 `lore init` merges into a JSON file only when it is plain JSON, keeping every
@@ -71,7 +71,7 @@ The entries, by hand:
 // .mcp.json (Claude Code) — also the shape for .cursor/mcp.json and ~/.cursor/mcp.json
 {
   "mcpServers": {
-    "project-memory": { "type": "stdio", "command": "lore", "args": ["mcp"] }
+    "pagelore": { "type": "stdio", "command": "lore", "args": ["mcp"] }
   }
 }
 ```
@@ -80,14 +80,14 @@ The entries, by hand:
 // .gemini/settings.json or ~/.gemini/settings.json — Gemini has no "type" for stdio
 {
   "mcpServers": {
-    "project-memory": { "command": "lore", "args": ["mcp"] }
+    "pagelore": { "command": "lore", "args": ["mcp"] }
   }
 }
 ```
 
 ```toml
 # ~/.codex/config.toml
-[mcp_servers.project-memory]
+[mcp_servers.pagelore]
 command = "lore"
 args = ["mcp"]
 ```
@@ -95,17 +95,23 @@ args = ["mcp"]
 or the clients' own commands:
 
 ```bash
-claude mcp add --transport stdio --scope user project-memory -- lore mcp
-gemini mcp add --scope user project-memory lore mcp
-codex mcp add project-memory -- lore mcp
+claude mcp add --transport stdio --scope user pagelore -- lore mcp
+gemini mcp add --scope user pagelore lore mcp
+codex mcp add pagelore -- lore mcp
 ```
 
 Claude Code asks once, in an interactive session, before it uses a project's
 `.mcp.json` servers; approve it there (`/mcp` shows the state).
 
 In tool lists the tools appear under the client's own prefix — in Claude Code
-`mcp__project-memory__memory_search` and `mcp__project-memory__memory_write`, in
-Gemini CLI `mcp_project-memory_memory_search` and so on.
+`mcp__pagelore__memory_search` and `mcp__pagelore__memory_write`, in
+Gemini CLI `mcp_pagelore_memory_search` and so on.
+
+Before 0.6.0 the server was registered as `project-memory`. `lore init --via mcp`
+replaces an entry under that name when it has exactly the shape `init` wrote,
+`lore uninstall` removes both names, and `lore doctor` names an old entry that is
+still there. A permission rule or agent definition that lists
+`mcp__project-memory__…` needs the new prefix.
 
 ## File, MCP, or both
 

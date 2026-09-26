@@ -24,7 +24,7 @@ docs win.
 lore init
 ```
 
-writes the block to `~/.project-memory/AGENT.md` and asks four questions. Arrows
+writes the block to `~/.pagelore/AGENT.md` and asks four questions. Arrows
 move, space ticks, enter confirms, escape skips; digits work too, and without a
 terminal (a pipe, CI) the questions become a numbered prompt.
 
@@ -37,7 +37,7 @@ terminal (a pipe, CI) the questions become a numbered prompt.
    question.
 4. **Where this project's pages live** — private and gitignored (the default),
    committed with the repository, or outside it behind a `.memory/` symlink into
-   `~/.project-memory/<project>/`.
+   `~/.pagelore/<project>/`.
 
 It previews the exact change and asks before writing. Running it again replaces
 its own fenced block instead of adding a second one, and reports `unchanged` for a
@@ -60,7 +60,7 @@ manual instructions and exits 0. All flags: [CLI reference](cli.md#lore-init).
 
 The line points at a file rather than carrying the text, because a transcription
 is a fork: the next release changes the block, every pasted copy stays as it was,
-and nothing says so. `~/.project-memory/AGENT.md` is refreshed by every `lore`
+and nothing says so. `~/.pagelore/AGENT.md` is refreshed by every `lore`
 invocation (about 50 µs against a 50 ms search), so an upgrade reaches every agent
 that includes it. Where a client has no include syntax the text is pasted instead;
 the block carries a version stamp in an HTML comment and `lore doctor` reports a
@@ -75,8 +75,8 @@ lore init --agent claude --agent gemini --agent codex --agent cursor --yes
 
 | Agent | File it reads every turn | What `lore init` puts there |
 |---|---|---|
-| Claude Code | `~/.claude/CLAUDE.md` | `@<home>/.project-memory/AGENT.md` |
-| Gemini CLI | `~/.gemini/GEMINI.md` | `@<home>/.project-memory/AGENT.md` |
+| Claude Code | `~/.claude/CLAUDE.md` | `@<home>/.pagelore/AGENT.md` |
+| Gemini CLI | `~/.gemini/GEMINI.md` | `@<home>/.pagelore/AGENT.md` |
 | Codex CLI | `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) | the block's text, pasted |
 | Cursor | no file — User Rules live in **Customize → Rules** | nothing; init tells you to paste the block there |
 | Anything else | whatever it reads every turn | either, if it expands `@path` |
@@ -93,7 +93,7 @@ Everything goes inside a fenced block
   file from `$CODEX_HOME` (default `~/.codex`), `AGENTS.override.md` first if one
   exists — `lore init` writes `AGENTS.md`, so an override file would hide it.
 - **Cursor**'s User Rules are a text field. Paste the contents of
-  `~/.project-memory/AGENT.md` there (`lore init --print` shows the path), or use
+  `~/.pagelore/AGENT.md` there (`lore init --print` shows the path), or use
   the MCP route, which does have a global file.
 
 The MCP route for every project — see [MCP](mcp.md#registering-it) for the
@@ -125,7 +125,7 @@ global files.
 Worth knowing per client:
 
 - **Claude Code** treats an import in a project `CLAUDE.md` that resolves outside
-  the project — as `@~/.project-memory/AGENT.md` does — as an *external import*:
+  the project — as `@~/.pagelore/AGENT.md` does — as an *external import*:
   the first time, it shows an approval dialog, and if you decline the import stays
   disabled. Approve it once. Claude Code reads a project `AGENTS.md` by itself only
   when there is no `CLAUDE.md` in the working directory or above.
@@ -142,7 +142,7 @@ The pages themselves, per project (`--store`):
 |---|---|---|
 | `gitignored` (default) | `.memory/` | created by the first write, which also gitignores it |
 | `tracked` | `.memory/` with a `.tracked` marker | committed and reviewed in pull requests — do not write secrets |
-| `home` | `~/.project-memory/<project>/`, reached through a `.memory/` symlink | the symlink is added to `.gitignore` |
+| `home` | `~/.pagelore/<project>/`, reached through a `.memory/` symlink | the symlink is added to `.gitignore` |
 
 ## 3. One specific agent
 
@@ -150,7 +150,7 @@ The pages themselves, per project (`--store`):
 
 A subagent file limits its tools with `tools:`. MCP tools are named
 `mcp__<server>__<tool>`, and `mcp__<server>` allows every tool of a server. With
-the server registered as `project-memory` (`lore init --via mcp`):
+the server registered as `pagelore` (`lore init --via mcp`):
 
 `.claude/agents/archivist.md` (or `~/.claude/agents/` for every project):
 
@@ -158,7 +158,7 @@ the server registered as `project-memory` (`lore init --via mcp`):
 ---
 name: archivist
 description: Answers "why is it like this" questions about this project from its recorded decisions, and records new ones. Use before changing an unfamiliar subsystem.
-tools: Read, Grep, Glob, mcp__project-memory__memory_search, mcp__project-memory__memory_write
+tools: Read, Grep, Glob, mcp__pagelore__memory_search, mcp__pagelore__memory_write
 ---
 
 Search project memory with memory_search before stating anything about this
@@ -172,7 +172,7 @@ that exist. A refusal says why and what to do instead — follow it.
 ```
 
 Without MCP, give the subagent `Bash` and the same instructions with `lore search`
-and `lore write` — the text of `~/.project-memory/AGENT.md` is the tested wording.
+and `lore write` — the text of `~/.pagelore/AGENT.md` is the tested wording.
 Claude Code's permission rule `Bash(lore:*)` grants exactly this program.
 
 ### A Codex profile
@@ -184,7 +184,7 @@ particular store through the shell it gives the agent:
 ```toml
 # ~/.codex/archivist.config.toml
 [shell_environment_policy]
-set = { PROJECT_MEMORY_DIR = "/path/to/project/.memory" }
+set = { PAGELORE_DIR = "/path/to/project/.memory" }
 ```
 
 ```bash
@@ -195,11 +195,11 @@ The instructions still come from `AGENTS.md` (global or project) or the prompt.
 
 ### Any agent, by environment
 
-Every command honours `PROJECT_MEMORY_DIR`, so an agent started with it set
+Every command honours `PAGELORE_DIR`, so an agent started with it set
 searches and writes that store wherever it runs:
 
 ```bash
-PROJECT_MEMORY_DIR=/path/to/project/.memory my-agent --task "…"
+PAGELORE_DIR=/path/to/project/.memory my-agent --task "…"
 ```
 
 The MCP server honours it too, and otherwise uses `CLAUDE_PROJECT_DIR` or walks up
@@ -209,9 +209,9 @@ from its working directory. See [configuration](configuration.md).
 
 | Agent | How it learns the memory exists | Verified |
 |---|---|---|
-| Claude Code | `@~/.project-memory/AGENT.md` in `CLAUDE.md` | yes, 15 of 15 acceptance sessions |
+| Claude Code | `@~/.pagelore/AGENT.md` in `CLAUDE.md` | yes, 15 of 15 acceptance sessions |
 | Codex CLI | the block pasted into `AGENTS.md` | yes, one acceptance run on Codex CLI 0.153 |
-| Gemini CLI | `@~/.project-memory/AGENT.md` in `GEMINI.md` | per vendor docs |
+| Gemini CLI | `@~/.pagelore/AGENT.md` in `GEMINI.md` | per vendor docs |
 | Cursor | the block in the project `AGENTS.md` or User Rules; or MCP | per vendor docs |
 | Anything else | either, in whatever it reads every turn | n/a |
 | Any of them, over MCP | `lore mcp` in its tool list, registered by `lore init --via mcp` | Claude Code: alone at default settings 0 of 15, later 3 of 5; every time with `ENABLE_TOOL_SEARCH=false` or with the file |

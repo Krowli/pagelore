@@ -37,7 +37,7 @@ Python 3.9 or newer, which is what a stock macOS ships. If `lore` cannot find on
 it says so and names every interpreter it tried. To pin one:
 
 ```bash
-export PROJECT_MEMORY_PYTHON=/usr/local/bin/python3.12
+export PAGELORE_PYTHON=/usr/local/bin/python3.12
 ```
 
 That variable is exclusive: if it names an interpreter that does not work, `lore`
@@ -49,6 +49,6 @@ the same program.
 ## Everything else
 
 Documentation, the evaluation numbers behind the ranking, and the reasons for each
-design decision: <https://github.com/Krowli/project-memory>
+design decision: <https://github.com/Krowli/pagelore>
 
 MIT.

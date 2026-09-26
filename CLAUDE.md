@@ -67,7 +67,7 @@ page; cross-link with `[[other-slug]]`.
 
 ## Working on this repository
 
-- `pytest` and `PROJECT_MEMORY_NO_FTS5=1 pytest` both have to pass; the second
+- `pytest` and `PAGELORE_NO_FTS5=1 pytest` both have to pass; the second
   covers the scan ranker that answers when SQLite has no FTS5.
 - `ruff check .` — line length 100, target `py39`.
 - The version is one literal in `src/pagelore/__init__.py`, plus the copy in

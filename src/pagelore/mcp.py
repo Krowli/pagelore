@@ -28,7 +28,7 @@ Two rules the transport imposes, both easy to break silently:
 - The store is not where the process happens to be standing. Claude Code makes no
   promise about a stdio server's working directory and puts the project root in
   `CLAUDE_PROJECT_DIR` instead; `resolve_store` reads that, after the explicit
-  `PROJECT_MEMORY_DIR`, before falling back to the cwd walk every command uses.
+  `PAGELORE_DIR`, before falling back to the cwd walk every command uses.
 """
 from __future__ import annotations
 
@@ -44,10 +44,10 @@ from . import __version__, instructions
 from . import search as memory_search
 from . import write as memory_write
 from .cli import add_version
-from .lib import STORE_ENV, find_store
+from .lib import STORE_ENV, env, find_store
 
 PROTOCOL = "2025-06-18"
-SERVER_NAME = "project-memory"
+SERVER_NAME = "pagelore"
 PROJECT_ENV = "CLAUDE_PROJECT_DIR"
 
 # The text the model sees before it has called anything. It is the instruction
@@ -108,14 +108,14 @@ TOOLS = [
 
 
 def resolve_store() -> Path:
-    """$PROJECT_MEMORY_DIR, else the project the harness names, else the cwd walk.
+    """$PAGELORE_DIR, else the project the harness names, else the cwd walk.
 
     `main` resolves it once and says so on stderr, which is the one line a person
     debugging "it wrote the page somewhere else" needs; `handle` resolves it when it
     is handed none, so the protocol can be exercised without a server around it.
     A store that does not exist yet is still a path here — the first write creates it.
     """
-    if os.environ.get(STORE_ENV):
+    if env(STORE_ENV):
         return find_store()
     project = os.environ.get(PROJECT_ENV)
     return find_store(Path(project)) if project else find_store()

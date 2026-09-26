@@ -44,8 +44,21 @@ const CANDIDATES = process.platform === "win32"
   ? [["py", ["-3"]], ["python", []], ["python3", []]]
   : [["python3", []], ["python", []]];
 
+// PROJECT_MEMORY_PYTHON is the pre-0.6.0 name. It is still read, with a warning
+// on stderr, until 0.7.0 removes it.
+function namedPython() {
+  if (process.env.PAGELORE_PYTHON) return process.env.PAGELORE_PYTHON;
+  const old = process.env.PROJECT_MEMORY_PYTHON;
+  if (old && !namedPython.warned) {
+    namedPython.warned = true;
+    process.stderr.write("pagelore: PROJECT_MEMORY_PYTHON is deprecated, use PAGELORE_PYTHON; " +
+                         "the old name stops working in 0.7.0\n");
+  }
+  return old || "";
+}
+
 function candidates() {
-  const named = process.env.PROJECT_MEMORY_PYTHON;
+  const named = namedPython();
   // Exclusive, not first-in-list: someone who names an interpreter and gets a
   // different one silently has been given the wrong answer by a helpful default.
   return named ? [[named, []]] : CANDIDATES;
@@ -84,15 +97,15 @@ function run() {
     return result.status === null ? 1 : result.status;
   }
 
-  const named = process.env.PROJECT_MEMORY_PYTHON;
+  const named = namedPython();
   process.stderr.write(
     "lore needs Python " + FLOOR + " or newer and could not find it.\n" +
     tried.map(function (line) { return "  tried " + line + "\n"; }).join("") +
     (named
-      ? "PROJECT_MEMORY_PYTHON is set to " + named + ", so nothing else was tried.\n" +
-        "FIX: unset PROJECT_MEMORY_PYTHON, or point it at a working Python " + FLOOR + "+.\n"
+      ? "PAGELORE_PYTHON is set to " + named + ", so nothing else was tried.\n" +
+        "FIX: unset PAGELORE_PYTHON, or point it at a working Python " + FLOOR + "+.\n"
       : "FIX: install Python from https://python.org/downloads, or set " +
-        "PROJECT_MEMORY_PYTHON to one you already have.\n" +
+        "PAGELORE_PYTHON to one you already have.\n" +
         "     Already have pipx? `pipx install pagelore` needs no Node at all.\n")
   );
   return 1;

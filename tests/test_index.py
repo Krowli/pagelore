@@ -73,7 +73,7 @@ def test_the_index_is_not_written_into_the_store(stocked):
 
 
 def test_a_symlinked_store_and_its_target_share_one_index(tmp_path):
-    """`lore init --store home` puts the pages in ~/.project-memory/<project> and
+    """`lore init --store home` puts the pages in ~/.pagelore/<project> and
     symlinks .memory at it. Keying on the unresolved path would index twice."""
     real = tmp_path / "real-store"
     real.mkdir()

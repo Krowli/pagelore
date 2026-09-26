@@ -21,11 +21,11 @@
     "sqlite",
     "fts5"
   ],
-  "homepage": "https://github.com/Krowli/project-memory#readme",
-  "bugs": "https://github.com/Krowli/project-memory/issues",
+  "homepage": "https://github.com/Krowli/pagelore#readme",
+  "bugs": "https://github.com/Krowli/pagelore/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Krowli/project-memory.git",
+    "url": "git+https://github.com/Krowli/pagelore.git",
     "directory": "npm"
   },
   "license": "MIT",

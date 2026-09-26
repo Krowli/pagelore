@@ -1,10 +1,10 @@
 # pagelore
 
-[![CI](https://github.com/Krowli/project-memory/actions/workflows/test.yml/badge.svg)](https://github.com/Krowli/project-memory/actions/workflows/test.yml)
+[![CI](https://github.com/Krowli/pagelore/actions/workflows/test.yml/badge.svg)](https://github.com/Krowli/pagelore/actions/workflows/test.yml)
 [![PyPI version](https://img.shields.io/pypi/v/pagelore.svg)](https://pypi.org/project/pagelore/)
 [![npm version](https://img.shields.io/npm/v/pagelore.svg)](https://www.npmjs.com/package/pagelore)
 [![Python versions](https://img.shields.io/pypi/pyversions/pagelore.svg)](https://pypi.org/project/pagelore/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Krowli/project-memory/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Krowli/pagelore/blob/main/LICENSE)
 
 **Durable project memory for AI coding agents — Claude Code, Codex, Cursor, Gemini
 CLI.** Decisions, contracts and bug post-mortems live as **markdown pages in your
@@ -26,7 +26,7 @@ person.
 
 - **Search that ranks.** BM25F over title and body; a SQLite FTS5 index kept as a
   disposable cache outside the store, and an in-process ranker when the index
-  cannot be used. [Measured](https://github.com/Krowli/project-memory/blob/main/docs/measurements.md) against grep, embeddings and the
+  cannot be used. [Measured](https://github.com/Krowli/pagelore/blob/main/docs/measurements.md) against grep, embeddings and the
   closest competitor.
 - **Writes are refused, not requested.** A page with no sources, a source that
   does not exist, or too little body is rejected with a `FIX:` line the agent acts
@@ -44,7 +44,7 @@ pipx install pagelore && lore init && lore doctor     # or: npm install -g pagel
 
 `lore init` shows the exact change and asks before writing; its default connects
 nothing. `lore doctor` says what is connected and what is broken. Other routes
-(pip, uv, from source), upgrading and removal: [installation](https://github.com/Krowli/project-memory/blob/main/docs/installation.md).
+(pip, uv, from source), upgrading and removal: [installation](https://github.com/Krowli/pagelore/blob/main/docs/installation.md).
 
 ## Quick start
 
@@ -82,7 +82,7 @@ lore init --agent claude --via mcp --scope project --yes   # writes .mcp.json
 
 ```
   agent (Claude Code, Codex, Cursor, Gemini CLI, …)
-     │ reads one @-line or pasted block every turn          ~/.project-memory/AGENT.md
+     │ reads one @-line or pasted block every turn          ~/.pagelore/AGENT.md
      │
      ├── lore search / show / write   (shell)  ─┐
      └── lore mcp  memory_search / memory_write ─┤  same functions, same gate
@@ -91,7 +91,7 @@ lore init --agent claude --via mcp --scope project --yes   # writes .mcp.json
                           FTS5 index     ← a cache in ~/.cache, rebuilt on demand
 ```
 
-The instruction block lives in one file, `~/.project-memory/AGENT.md`, refreshed
+The instruction block lives in one file, `~/.pagelore/AGENT.md`, refreshed
 by every `lore` command; each agent's configuration carries one line pointing at
 it, so an upgrade reaches every agent without editing anything. Measured on
 Claude Code: with the line the agent searched before answering 15 times out of
@@ -99,16 +99,16 @@ Claude Code: with the line the agent searched before answering 15 times out of
 
 ## Documentation
 
-- [Installation](https://github.com/Krowli/project-memory/blob/main/docs/installation.md) — pipx, pip, uv, npm, from source; upgrading, uninstalling, 0.3.x
-- [Connecting agents](https://github.com/Krowli/project-memory/blob/main/docs/agents.md) — every agent at once, one project, one specific agent
-- [MCP server](https://github.com/Krowli/project-memory/blob/main/docs/mcp.md) — `lore mcp`, its two tools, per-client registration
-- [CLI reference](https://github.com/Krowli/project-memory/blob/main/docs/cli.md) — every command and flag, exit codes, the write gate, the log
-- [Configuration](https://github.com/Krowli/project-memory/blob/main/docs/configuration.md) — environment variables and files
-- [Troubleshooting](https://github.com/Krowli/project-memory/blob/main/docs/troubleshooting.md) — what each `lore doctor` line means
-- [FAQ](https://github.com/Krowli/project-memory/blob/main/docs/faq.md)
-- [Page format](https://github.com/Krowli/project-memory/blob/main/docs/page-format.md) · [Retrieval](https://github.com/Krowli/project-memory/blob/main/docs/retrieval.md) · [Measurements](https://github.com/Krowli/project-memory/blob/main/docs/measurements.md)
-- [Contributing](https://github.com/Krowli/project-memory/blob/main/CONTRIBUTING.md) · [Security](https://github.com/Krowli/project-memory/blob/main/SECURITY.md) · [Changelog](https://github.com/Krowli/project-memory/blob/main/CHANGELOG.md)
+- [Installation](https://github.com/Krowli/pagelore/blob/main/docs/installation.md) — pipx, pip, uv, npm, from source; upgrading, uninstalling, 0.3.x
+- [Connecting agents](https://github.com/Krowli/pagelore/blob/main/docs/agents.md) — every agent at once, one project, one specific agent
+- [MCP server](https://github.com/Krowli/pagelore/blob/main/docs/mcp.md) — `lore mcp`, its two tools, per-client registration
+- [CLI reference](https://github.com/Krowli/pagelore/blob/main/docs/cli.md) — every command and flag, exit codes, the write gate, the log
+- [Configuration](https://github.com/Krowli/pagelore/blob/main/docs/configuration.md) — environment variables and files
+- [Troubleshooting](https://github.com/Krowli/pagelore/blob/main/docs/troubleshooting.md) — what each `lore doctor` line means
+- [FAQ](https://github.com/Krowli/pagelore/blob/main/docs/faq.md)
+- [Page format](https://github.com/Krowli/pagelore/blob/main/docs/page-format.md) · [Retrieval](https://github.com/Krowli/pagelore/blob/main/docs/retrieval.md) · [Measurements](https://github.com/Krowli/pagelore/blob/main/docs/measurements.md)
+- [Contributing](https://github.com/Krowli/pagelore/blob/main/CONTRIBUTING.md) · [Security](https://github.com/Krowli/pagelore/blob/main/SECURITY.md) · [Changelog](https://github.com/Krowli/pagelore/blob/main/CHANGELOG.md)
 
 ## License
 
-MIT — see [LICENSE](https://github.com/Krowli/project-memory/blob/main/LICENSE).
+MIT — see [LICENSE](https://github.com/Krowli/pagelore/blob/main/LICENSE).

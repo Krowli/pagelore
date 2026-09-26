@@ -397,7 +397,7 @@ def test_the_screen_draws_like_opencode_and_runs_commands(store, tmp_path):
         os.chdir(store.parent)
         os.environ.update({"HOME": str(home), "USERPROFILE": str(home),
                            "PYTHONPATH": str(conftest.REPO / "src"),
-                           "PROJECT_MEMORY_NO_REFRESH": "1",
+                           "PAGELORE_NO_REFRESH": "1",
                            "TERM": "xterm-256color",
                            "PYTHONUTF8": "1"})
         os.execv(sys.executable, [sys.executable, "-m", "pagelore", "dev", "--panes"])

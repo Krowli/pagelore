@@ -14,7 +14,7 @@ shipped, and it applies to the maintainer too.
 ## Setup
 
 ```bash
-git clone https://github.com/Krowli/project-memory && cd project-memory
+git clone https://github.com/Krowli/pagelore && cd pagelore
 make dev          # .venv: editable install, pytest and ruff.
                   # The `lore` already on PATH may be a released build; the one
                   # that tracks this tree is .venv/bin/lore.
@@ -35,7 +35,7 @@ bash tools/smoke.sh   # or: make smoke. Build the wheel, install it in an
 
 Before a pull request:
 
-- `pytest` and `PROJECT_MEMORY_NO_FTS5=1 pytest` both pass (`make test` runs both
+- `pytest` and `PAGELORE_NO_FTS5=1 pytest` both pass (`make test` runs both
   and ruff);
 - `ruff check .` is clean — line length 100, target `py39`;
 - `CHANGELOG.md` has an entry under `[Unreleased]`;

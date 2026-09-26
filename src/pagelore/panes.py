@@ -257,7 +257,7 @@ def run_command(state: State, store: Path, *, cwd: Path,
     out, err = io.StringIO(), io.StringIO()
     overrides: dict[str, str] = {}
     if sandbox is not None:
-        overrides["PROJECT_MEMORY_DIR"] = str(store)
+        overrides["PAGELORE_DIR"] = str(store)
         if home is not None:
             overrides["HOME"] = str(home)
             overrides["USERPROFILE"] = str(home)

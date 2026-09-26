@@ -5,7 +5,7 @@ store before answering 15 times out of 15 on a task-shaped prompt. Without it,
 never. So where it lives and whether it is current is not a packaging detail — it
 is the product working or not working.
 
-It lives at `~/.project-memory/AGENT.md`, and the user's agent config carries one
+It lives at `~/.pagelore/AGENT.md`, and the user's agent config carries one
 line pointing there. Three properties follow, and each was chosen against an
 alternative that fails silently:
 
@@ -29,10 +29,14 @@ import re
 from pathlib import Path
 
 from . import __version__
-from .lib import atomic_write
+from .lib import atomic_write, env
 
-HOME_ENV = "PROJECT_MEMORY_HOME"
-NO_REFRESH_ENV = "PROJECT_MEMORY_NO_REFRESH"
+HOME_ENV = "PAGELORE_HOME"
+NO_REFRESH_ENV = "PAGELORE_NO_REFRESH"
+HOME_DIRNAME = ".pagelore"
+# Where the directory lived before 0.6.0, when the product still had two names.
+# `migrate_home` moves it once and leaves a link behind; see there.
+LEGACY_HOME_DIRNAME = ".project-memory"
 STAMP = ".version"
 BLOCK = "AGENT.md"
 
@@ -55,8 +59,56 @@ _LEGACY_RE = re.compile(re.escape(MARK_LEGACY) + r".*?" + re.escape(MARK_LEGACY_
 
 
 def home() -> Path:
-    override = os.environ.get(HOME_ENV)
-    return Path(override).expanduser() if override else Path.home() / ".project-memory"
+    override = env(HOME_ENV)
+    return Path(override).expanduser() if override else Path.home() / HOME_DIRNAME
+
+
+def legacy_home() -> Path:
+    return Path.home() / LEGACY_HOME_DIRNAME
+
+
+def migrate_home(repoint=()) -> Path | None:
+    """Move `~/.project-memory` to `~/.pagelore`, once. Returns the new path when it
+    moved something, None otherwise. Never raises.
+
+    One `rename`, so there is no moment with half a directory in each place. It is
+    skipped when the home is set explicitly — the person chose that path — and when
+    `~/.pagelore` already exists: two directories are not merged here, because one
+    of them is someone's, and `lore doctor` names the pair instead.
+
+    A link is left at the old path. `lore init --store home` points a project's
+    `.memory` symlink into this directory, and those links are in repositories this
+    process cannot enumerate; without the link, every such store would go dark on
+    upgrade with no error. `repoint` names instruction files whose managed block
+    includes the old path, and only that block is rewritten.
+    """
+    try:
+        if env(HOME_ENV):
+            return None
+        old, new = legacy_home(), Path.home() / HOME_DIRNAME
+        if old.is_symlink() or not old.is_dir() or new.exists() or new.is_symlink():
+            return None
+        os.rename(old, new)
+    except OSError:
+        return None
+    try:
+        old.symlink_to(new, target_is_directory=True)
+    except OSError:
+        pass            # Windows without the symlink privilege: the move still stands
+    for path in repoint:
+        try:
+            text = Path(path).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        new_text = _BLOCK_RE.sub(lambda m: m.group(0).replace(f"@{old}", f"@{new}"), text)
+        if new_text != text:
+            try:
+                # `write_text`, not `atomic_write`: a CLAUDE.md is often a symlink into
+                # someone's dotfiles, and a rename would replace the link with a copy.
+                Path(path).write_text(new_text, encoding="utf-8")
+            except OSError:
+                pass
+    return new
 
 
 def block_path() -> Path:
@@ -141,7 +193,7 @@ def refresh_quietly() -> bool:
     processes replacing one file.
     """
     try:
-        if os.environ.get(NO_REFRESH_ENV):
+        if env(NO_REFRESH_ENV):
             return False
         if not home().is_dir():
             return False

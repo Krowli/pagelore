@@ -312,7 +312,7 @@ def validate(slug: str, kind: str, sources: list[str], body: str, store: Path,
     if problem:
         return reject(
             store, "store_unusable", problem,
-            "point --store or $PROJECT_MEMORY_DIR at a directory, or restore the "
+            "point --store or $PAGELORE_DIR at a directory, or restore the "
             "symlink target, then retry", slug)
 
     if not SLUG_RE.match(slug):

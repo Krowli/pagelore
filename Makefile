@@ -23,7 +23,7 @@ dev:
 
 test:
 	$(VENV)/bin/pytest
-	PROJECT_MEMORY_NO_FTS5=1 $(VENV)/bin/pytest
+	PAGELORE_NO_FTS5=1 $(VENV)/bin/pytest
 	$(VENV)/bin/ruff check .
 
 lint:

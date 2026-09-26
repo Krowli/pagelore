@@ -26,7 +26,7 @@ from pathlib import Path
 
 from . import init, instructions
 from .cli import add_version
-from .init import MCP_SERVER, PROJECT_FILES, agent_files, codex_home
+from .init import MCP_LEGACY, MCP_SERVER, PROJECT_FILES, agent_files, codex_home
 
 
 def _remove_mcp(root: Path | None, out) -> bool:
@@ -39,29 +39,32 @@ def _remove_mcp(root: Path | None, out) -> bool:
     json_files = ([root / ".mcp.json", root / ".gemini" / "settings.json",
                    root / ".cursor" / "mcp.json"] if root else []) \
         + [home / ".gemini" / "settings.json", home / ".cursor" / "mcp.json"]
+    # Both names: the server was `project-memory` before 0.6.0.
     for path in json_files:
-        if not path.is_file():
-            continue
-        try:
-            changed, empty = init.remove_json_server(path)
-        except OSError as exc:
-            print(f"skipped:   {path} ({exc})", file=sys.stderr)
-            continue
-        if not changed:
-            continue
-        did = True
-        if empty and path.name == ".mcp.json":
-            path.unlink()
-            print(f"removed:   {path}  (only our MCP server was in it)", file=out)
-        else:
-            print(f"removed:   the MCP server from {path}", file=out)
+        for name in (MCP_SERVER, MCP_LEGACY):
+            if not path.is_file():
+                continue
+            try:
+                changed, empty = init.remove_json_server(path, name)
+            except OSError as exc:
+                print(f"skipped:   {path} ({exc})", file=sys.stderr)
+                continue
+            if not changed:
+                continue
+            did = True
+            if empty and path.name == ".mcp.json":
+                path.unlink()
+                print(f"removed:   {path}  (only our MCP server was in it)", file=out)
+            else:
+                print(f"removed:   the MCP server {name} from {path}", file=out)
     # The files that went through the harness's own command go out the same way.
-    if init.registered_in_json(init._read_json(home / ".claude.json") or {}) is not None:
-        init._run_or_print(["claude", "mcp", "remove", "--scope", "user", MCP_SERVER], out)
-        did = True
-    if init.codex_registered(codex_home() / "config.toml") is not None:
-        init._run_or_print(["codex", "mcp", "remove", MCP_SERVER], out)
-        did = True
+    for name in (MCP_SERVER, MCP_LEGACY):
+        if init.registered_in_json(init._read_json(home / ".claude.json") or {}, name) is not None:
+            init._run_or_print(init._remove_argv("claude", name), out, name)
+            did = True
+        if init.codex_registered(codex_home() / "config.toml", name) is not None:
+            init._run_or_print(init._remove_argv("codex", name), out, name)
+            did = True
     return did
 
 
@@ -69,7 +72,7 @@ def main(argv: list[str] | None = None, *, prog: str = "lore uninstall") -> int:
     ap = argparse.ArgumentParser(prog=prog, description="Disconnect the memory from your agents.")
     add_version(ap)
     ap.add_argument("--yes", action="store_true",
-                    help="also remove ~/.project-memory/ (the block, not your pages)")
+                    help="also remove ~/.pagelore/ (the block, not your pages)")
     args = ap.parse_args(argv)
 
     root = init._project_root()
@@ -100,6 +103,11 @@ def main(argv: list[str] | None = None, *, prog: str = "lore uninstall") -> int:
         shutil.rmtree(home, ignore_errors=True)
         print(f"removed:   {home}")
         removed = True
+        # The link a 0.6.0 upgrade left at the old path, now pointing at nothing.
+        legacy = instructions.legacy_home()
+        if legacy.is_symlink() and not legacy.exists():
+            legacy.unlink()
+            print(f"removed:   {legacy}  (the link to the old location)")
     elif home.is_dir():
         print(f"kept:      {home}  (pass --yes to remove it too)")
 

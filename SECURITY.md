@@ -4,7 +4,7 @@
 
 Please report security issues **privately**, through GitHub's private
 vulnerability reporting:
-<https://github.com/Krowli/project-memory/security/advisories/new>
+<https://github.com/Krowli/pagelore/security/advisories/new>
 
 Do not open a public issue for a vulnerability. Include what you found, how to
 reproduce it, and the version (`lore --version`). A fix is released as a patch

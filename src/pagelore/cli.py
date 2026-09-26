@@ -33,7 +33,7 @@ COMMANDS = ("search", "show", "list", "write", "edit", "rm", "stats", "init", "d
 MODULES = {"list": "listing", "rm": "remove"}
 
 # The two console scripts this package installs. `lore` is the documented name;
-# `project-memory` is the escape hatch for a machine where something else already
+# `pagelore` is the escape hatch for a machine where something else already
 # owns `lore`, and every message reflects whichever one was actually run.
 NAMES = ("lore", "pagelore")
 
@@ -185,13 +185,22 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     module = importlib.import_module(f"pagelore.{MODULES.get(name, name)}")
+    # Before the command, so it runs against the post-0.6.0 layout: a pre-0.6.0
+    # `~/.project-memory` is moved to `~/.pagelore` once. `init` does it itself, to
+    # report the move; NO_REFRESH is the opt-out for all of this housekeeping.
+    # The directory test comes first so an ordinary search does not import `init`.
+    from . import instructions, lib
+    legacy = instructions.legacy_home()
+    if (name != "init" and legacy.is_dir() and not legacy.is_symlink()
+            and not lib.env(instructions.NO_REFRESH_ENV)):
+        from . import init
+        init.migrate_legacy_home()
     try:
         return module.main(rest, prog=f"{prog} {name}")
     finally:
         # Housekeeping, after the subcommand's output and without touching its exit
         # code: bring the copy of the instruction block that agents include up to
         # this install's text. Never raises, never creates anything.
-        from . import instructions
         instructions.refresh_quietly()
 
 

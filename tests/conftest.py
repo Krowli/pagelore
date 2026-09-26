@@ -15,7 +15,7 @@ LORE = [sys.executable, "-m", "pagelore"]
 def lore_env(**extra) -> dict:
     """A child that can import the package and will not touch the user's home."""
     return {**os.environ, "PYTHONPATH": str(REPO / "src"),
-            "PROJECT_MEMORY_NO_REFRESH": "1", **extra}
+            "PAGELORE_NO_REFRESH": "1", **extra}
 
 
 @pytest.fixture()

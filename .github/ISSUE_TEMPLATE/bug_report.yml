@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thanks for reporting. Security issues go through a private advisory instead:
-        https://github.com/Krowli/project-memory/security/advisories/new
+        https://github.com/Krowli/pagelore/security/advisories/new
   - type: textarea
     id: what
     attributes:

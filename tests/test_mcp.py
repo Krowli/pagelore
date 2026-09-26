@@ -55,7 +55,7 @@ def project(tmp_path, monkeypatch):
 def test_initialize_names_the_protocol_and_the_server(project):
     result = mcp.handle(rpc("initialize", {}))["result"]
     assert result["protocolVersion"] == mcp.PROTOCOL
-    assert result["serverInfo"]["name"] == mcp.SERVER_NAME == "project-memory"
+    assert result["serverInfo"]["name"] == mcp.SERVER_NAME == "pagelore"
     assert result["serverInfo"]["version"] == pagelore.__version__
 
 
@@ -122,7 +122,7 @@ def test_a_write_lands_in_the_store_claude_code_names_not_in_cwd(project, tmp_pa
     assert not (tmp_path / ".memory").exists()
 
 
-def test_project_memory_dir_wins_over_claude_project_dir(project, tmp_path, monkeypatch):
+def test_pagelore_dir_wins_over_claude_project_dir(project, tmp_path, monkeypatch):
     elsewhere = tmp_path / "elsewhere" / ".memory"
     elsewhere.mkdir(parents=True)
     monkeypatch.setenv(mcp.STORE_ENV, str(elsewhere))
@@ -163,7 +163,7 @@ def test_a_tool_crash_reaches_the_model_not_the_process(project, monkeypatch):
 def serve(project, feed: bytes):
     return subprocess.run([*conftest.LORE, "mcp"], input=feed, capture_output=True,
                           timeout=30, cwd=project,
-                          env=conftest.lore_env(PROJECT_MEMORY_DIR=str(project / ".memory")))
+                          env=conftest.lore_env(PAGELORE_DIR=str(project / ".memory")))
 
 
 def test_stdout_carries_json_lines_and_nothing_else(project):

@@ -84,8 +84,11 @@ STORE_MODES = ("gitignored", "tracked", "home")
 SCOPES = ("global", "project")
 # How the agent reaches the memory: the instruction file, an MCP server, or both.
 VIA = ("file", "mcp")
-# The server's name in every harness's config — the name the measurement used.
-MCP_SERVER = "project-memory"
+# The server's name in every harness's config. It was `project-memory` before 0.6.0;
+# an entry under that name in exactly the shape this program wrote is replaced by
+# `init` and removed by `uninstall`, and `doctor` names any that is left.
+MCP_SERVER = "pagelore"
+MCP_LEGACY = "project-memory"
 
 
 def target_for(key: str, root: Path | None) -> tuple[str, Path | None, str]:
@@ -123,6 +126,29 @@ def _where(key: str, root: Path | None) -> str:
     if root is not None:
         return f"{short(target)}  (read by {PROJECT_READERS[target.name]})"
     return short(target)
+
+
+def migrate_legacy_home(out=None) -> Path | None:
+    """Move a pre-0.6.0 `~/.project-memory` to `~/.pagelore`, and repoint the
+    includes that `init` wrote to it: the global Claude and Gemini files, and this
+    project's own when there is one. Called by `init` and before every command.
+
+    The cheap test comes first, because this runs on every search: a `git` call to
+    find the project is paid only on the one run that actually moves something.
+    """
+    old = instructions.legacy_home()
+    if old.is_symlink() or not old.is_dir():
+        return None
+    files = [target for _, target, kind in agent_files().values()
+             if target is not None and kind == "include"]
+    root = _project_root()
+    if root is not None:
+        files += [root / "CLAUDE.md", root / "GEMINI.md"]
+    moved = instructions.migrate_home(files)
+    if moved is not None and out is not None:
+        report("moved", f"{short(old)} → {short(moved)}  (a link is left at the old path)",
+               out, moved)
+    return moved
 
 
 def _project_root() -> Path | None:
@@ -337,27 +363,47 @@ def _read_json(path: Path):
     return doc if isinstance(doc, dict) else None
 
 
+def is_legacy_entry(entry) -> bool:
+    """Whether a `project-memory` entry is one this program wrote before 0.6.0.
+
+    Exactly the shapes `mcp_entry` produces, for either command name. An empty `env`
+    is tolerated because `claude mcp add` stores one; anything else — another
+    command, extra args, a variable someone set — is a person's edit, and a person's
+    entry is theirs to rename.
+    """
+    if not isinstance(entry, dict):
+        return False
+    entry = {k: v for k, v in entry.items() if not (k == "env" and v == {})}
+    return any(entry == mcp_entry(key, cmd) for key in ORDER for cmd in ("lore", "pagelore"))
+
+
 def merge_json_server(path: Path, entry: dict) -> str | None:
     """Fold our server into a JSON config, keeping everything else.
 
     Returns "wrote" when the file did not exist, "unchanged" when our entry was
     already there exactly as it would be written — then the file is not touched —
     "updated" otherwise, or None when the file is not plain JSON. Then nothing is
-    written: a config someone keeps with comments in it is theirs to edit.
+    written: a config someone keeps with comments in it is theirs to edit. A
+    pre-0.6.0 `project-memory` entry this program wrote goes in the same write, so
+    the agent does not end up with the same tools under two names.
     """
     doc = _read_json(path)
     if doc is None:
         return None
-    if path.exists() and registered_in_json(doc) == entry:
+    legacy = is_legacy_entry(registered_in_json(doc, MCP_LEGACY))
+    if path.exists() and registered_in_json(doc) == entry and not legacy:
         return "unchanged"
     action = "updated" if path.exists() else "wrote"
-    doc.setdefault("mcpServers", {})[MCP_SERVER] = entry
+    servers = doc.setdefault("mcpServers", {})
+    if legacy:
+        del servers[MCP_LEGACY]
+    servers[MCP_SERVER] = entry
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return action
 
 
-def registered_in_json(doc) -> dict | None:
+def registered_in_json(doc, name: str = MCP_SERVER) -> dict | None:
     """Our entry under the top-level `mcpServers`, and only there.
 
     That is where `.mcp.json`, Gemini's settings.json and the user-scope half of
@@ -368,11 +414,11 @@ def registered_in_json(doc) -> dict | None:
     level or nothing.
     """
     servers = doc.get("mcpServers") if isinstance(doc, dict) else None
-    entry = servers.get(MCP_SERVER) if isinstance(servers, dict) else None
+    entry = servers.get(name) if isinstance(servers, dict) else None
     return entry if isinstance(entry, dict) else None
 
 
-def remove_json_server(path: Path) -> tuple[bool, bool]:
+def remove_json_server(path: Path, name: str = MCP_SERVER) -> tuple[bool, bool]:
     """Take our entry out. Returns (changed, the document is now empty).
 
     An emptied `mcpServers` goes too, so a `.mcp.json` this program created reads
@@ -381,16 +427,16 @@ def remove_json_server(path: Path) -> tuple[bool, bool]:
     not plain JSON is left alone.
     """
     doc = _read_json(path)
-    if not doc or registered_in_json(doc) is None:
+    if not doc or registered_in_json(doc, name) is None:
         return False, False
-    del doc["mcpServers"][MCP_SERVER]
+    del doc["mcpServers"][name]
     if not doc["mcpServers"]:
         del doc["mcpServers"]
     path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return True, not doc
 
 
-def codex_registered(config_toml: Path) -> str | None:
+def codex_registered(config_toml: Path, name: str = MCP_SERVER) -> str | None:
     """The `command` of our server in Codex's config.toml; "" when the table is there
     but the command is not readable; None when it is not registered.
 
@@ -406,7 +452,7 @@ def codex_registered(config_toml: Path) -> str | None:
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("["):
-            inside = stripped in (f"[mcp_servers.{MCP_SERVER}]", f'[mcp_servers."{MCP_SERVER}"]')
+            inside = stripped in (f"[mcp_servers.{name}]", f'[mcp_servers."{name}"]')
             seen = seen or inside
             continue
         if inside and stripped.startswith("command"):
@@ -415,7 +461,7 @@ def codex_registered(config_toml: Path) -> str | None:
     return "" if seen else None
 
 
-def _run_or_print(argv: list[str], out) -> bool:
+def _run_or_print(argv: list[str], out, name: str = MCP_SERVER) -> bool:
     """The harness's own `mcp add` / `mcp remove`, when the harness is here to run it.
 
     Otherwise the line is printed for the person: the two files behind these
@@ -437,7 +483,7 @@ def _run_or_print(argv: list[str], out) -> bool:
         return False
     verb = argv[2]
     if proc.returncode == 0:
-        report("added" if verb == "add" else "removed", f"{MCP_SERVER} via {argv[0]} mcp {verb}", out)
+        report("added" if verb == "add" else "removed", f"{name} via {argv[0]} mcp {verb}", out)
         return True
     said = (proc.stderr or proc.stdout).strip().splitlines()
     report("skipped", f"{argv[0]} exited {proc.returncode}: {said[0] if said else 'no output'}", out)
@@ -445,10 +491,30 @@ def _run_or_print(argv: list[str], out) -> bool:
     return False
 
 
+def legacy_harness_entry(key: str) -> bool:
+    """Whether Claude Code's user scope or Codex still carries a `project-memory`
+    server this program registered before 0.6.0. Those two went in through the
+    harness's own `mcp add`, so they come out through its `mcp remove`."""
+    if key == "claude":
+        doc = _read_json(Path.home() / ".claude.json") or {}
+        return is_legacy_entry(registered_in_json(doc, MCP_LEGACY))
+    if key == "codex":
+        return codex_registered(codex_home() / "config.toml", MCP_LEGACY) in ("lore", "pagelore")
+    return False
+
+
+def _remove_argv(key: str, name: str) -> list[str]:
+    if key == "claude":
+        return ["claude", "mcp", "remove", "--scope", "user", name]
+    return ["codex", "mcp", "remove", name]
+
+
 def _write_mcp(chosen: list[str], cmd: str, out, root: Path | None) -> None:
     for key in chosen:
         _, path, argv = mcp_target(key, root, cmd)
         if argv is not None:
+            if legacy_harness_entry(key):
+                _run_or_print(_remove_argv(key, MCP_LEGACY), out, MCP_LEGACY)
             _run_or_print(argv, out)
             continue
         action = merge_json_server(path, mcp_entry(key, cmd))
@@ -480,7 +546,7 @@ def _apply_store(mode: str, root: Path, out) -> None:
         report("store", f"{short(store)}  committed with the repo; do not write secrets here",
                out)
         return
-    # `instructions.home()`, not `Path.home() / ".project-memory"`: the same directory
+    # `instructions.home()`, not `Path.home() / ".pagelore"`: the same directory
     # by default, but one place decides where it is. Two computations of one path drift,
     # and this one drifted in the only way that matters — it could not be redirected, so
     # a test of this mode wrote into the real home directory on a CI machine.
@@ -507,7 +573,7 @@ def _ignore(root: Path, out) -> None:
         return
     prefix = "" if (not existing or existing.endswith("\n")) else "\n"
     with gitignore.open("a", encoding="utf-8") as fh:
-        fh.write(f"{prefix}\n# project-memory: notes stay local\n.memory/\n")
+        fh.write(f"{prefix}\n# pagelore: notes stay local\n.memory/\n")
     report("ignored", ".memory/ added to .gitignore", out)
 
 
@@ -541,7 +607,9 @@ def main(argv: list[str] | None = None, *, prog: str = "lore init",
     cmd = args.command or prog.split()[0]
 
     # First, always: the file the line points at has to exist before the line is
-    # offered. A wrong include path is the one failure that produces no error.
+    # offered. A wrong include path is the one failure that produces no error. A
+    # pre-0.6.0 home is moved before it, so the block is written once, in one place.
+    migrate_legacy_home(out)
     block_file = instructions.install(cmd)
     print(f"{prog}  ·  block at {short(block_file)}\n", file=out)
     result = {"version": __version__, "block": str(block_file), "line": f"@{block_file}"}
@@ -638,7 +706,7 @@ def main(argv: list[str] | None = None, *, prog: str = "lore init",
                 short(root),
                 [("gitignored", "Private", "appears on the first write, gitignored"),
                  ("tracked", "Committed", "reviewed in pull requests, shared with the team"),
-                 ("home", "Outside the repo", f"~/.project-memory/{root.name}/ via a symlink")],
+                 ("home", "Outside the repo", f"{short(instructions.home() / root.name)}/ via a symlink")],
                 cursor=0, stdin=inp, out=out, keyboard=keyboard)
             mode = picked[0] if picked else "gitignored"
         _apply_store(mode, root, out)

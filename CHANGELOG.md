@@ -6,6 +6,34 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **One name: everything `project-memory` is now `pagelore`.** The package and the
+  command already were; the rest now follows. Breaking, with a migration that needs
+  no hand edits — see
+  [upgrading to 0.6.0](docs/installation.md#upgrading-to-060-one-name).
+  - **`~/.project-memory` → `~/.pagelore`.** The first command after the upgrade (or
+    `lore init`) moves it with one rename and leaves a link at the old path, so a
+    `--store home` project whose `.memory` symlink points into the old directory keeps
+    working. The `@` include `lore init` wrote is repointed, inside its managed block
+    only, in `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md` and the current project's
+    `CLAUDE.md`/`GEMINI.md`. When both directories exist nothing is merged and
+    `lore doctor` reports it; with `PAGELORE_HOME` set nothing moves.
+  - **`PROJECT_MEMORY_*` → `PAGELORE_*`** (`DIR`, `HOME`, `NO_REFRESH`, `NO_FTS5`,
+    and `PYTHON` in the npm shim). The old names are still read when the new one is
+    unset, with a one-line deprecation warning on stderr (never on `--json` stdout or
+    the MCP stream). **0.7.0 removes them.**
+  - **MCP server `project-memory` → `pagelore`**, in every registration `lore init`
+    writes: Claude Code's `.mcp.json` and user scope, Gemini, Codex and Cursor.
+    `init` replaces an old entry that has exactly the shape it used to write (through
+    `claude mcp remove` / `codex mcp remove` where it went in that way) and leaves an
+    edited one alone; `lore uninstall` removes both names; `lore doctor` reports an
+    old one. Tool names are unchanged; the client prefix becomes
+    `mcp__pagelore__memory_search`.
+  - The search index cache moves to `~/.cache/pagelore/` and rebuilds on the next
+    search; `~/.cache/project-memory/` can be deleted.
+  - The repository is now `github.com/Krowli/pagelore`; the old URL redirects.
+
 ## [0.5.1] - 2026-09-26
 
 ### Added
@@ -795,15 +823,15 @@ they found, all of it now covered by a test that fails when the fix is removed:
 - Claude Code plugin and marketplace manifests.
 - Test suite covering search, writing, frontmatter tolerance and manifests.
 
-[Unreleased]: https://github.com/Krowli/project-memory/compare/v0.5.1...HEAD
-[0.5.1]: https://github.com/Krowli/project-memory/compare/v0.5.0...v0.5.1
-[0.5.0]: https://github.com/Krowli/project-memory/compare/v0.4.1...v0.5.0
-[0.3.4]: https://github.com/Krowli/project-memory/compare/v0.3.3...v0.3.4
-[0.3.3]: https://github.com/Krowli/project-memory/compare/v0.3.2...v0.3.3
-[0.3.2]: https://github.com/Krowli/project-memory/compare/v0.3.1...v0.3.2
-[0.3.1]: https://github.com/Krowli/project-memory/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/Krowli/project-memory/compare/v0.2.2...v0.3.0
-[0.2.2]: https://github.com/Krowli/project-memory/compare/v0.2.1...v0.2.2
-[0.2.1]: https://github.com/Krowli/project-memory/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/Krowli/project-memory/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/Krowli/project-memory/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Krowli/pagelore/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/Krowli/pagelore/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/Krowli/pagelore/compare/v0.4.1...v0.5.0
+[0.3.4]: https://github.com/Krowli/pagelore/compare/v0.3.3...v0.3.4
+[0.3.3]: https://github.com/Krowli/pagelore/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/Krowli/pagelore/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/Krowli/pagelore/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/Krowli/pagelore/compare/v0.2.2...v0.3.0
+[0.2.2]: https://github.com/Krowli/pagelore/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/Krowli/pagelore/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/Krowli/pagelore/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/Krowli/pagelore/releases/tag/v0.1.0
