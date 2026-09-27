@@ -126,6 +126,10 @@ So `lore write` exits 1 and prints a `FIX:` line naming the next command when a
 page has:
 
 - no `--source`, or a `--source` path that does not exist;
+- a title or body that looks like a committed credential (an AWS access key,
+  a GitHub token — classic or fine-grained, an Anthropic or OpenAI API key, a
+  Slack token, or a PEM private key header) — checked ahead of the length
+  floor below, because a secret is the more urgent problem;
 - a resulting page under 200 characters — measured on the page that will exist,
   so a short amendment to a substantial page is fine while a thin new page is not;
 - an unknown `--kind`, or a slug that is not kebab-case;
@@ -133,7 +137,18 @@ page has:
 
 `--slug` and `--title` are required by the parser and produce its usage error; the
 others are checked by the gate so that the refusal carries a `FIX:` line the agent
-acts on.
+acts on. The refusal for a credential names its kind and location only — `title`,
+or `body line N` counting the `--body` text on its own (not the title) — never
+the matched value, since the refusal reason is written to the store's log.
+
+A long random-looking string (base64/hex-like, 40+ characters, Shannon entropy
+at or above 4.5 bits/character) does not refuse the write — it has false
+positives on legitimate long tokens — but prints a warning to stderr after a
+successful write, exit code still 0:
+
+```
+⚠ body line 12 looks like a credential (high-entropy string) — if it is one, remove it and rewrite the page
+```
 
 Page format: [page format](page-format.md).
 

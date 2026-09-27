@@ -43,6 +43,30 @@ def test_groups_refusals_by_code(logged):
     assert s["reject_codes"] == {"no_sources": 2, "body_too_short": 1}
 
 
+def test_warn_codes_are_grouped_like_reject_codes(tmp_path):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    for event in [
+        {"event": "write", "slug": "a", "mode": "create", "chars": 400,
+         "warnings": ["high_entropy"]},
+        {"event": "write", "slug": "b", "mode": "create", "chars": 400,
+         "warnings": ["high_entropy"]},
+        {"event": "write", "slug": "c", "mode": "create", "chars": 400},
+    ]:
+        memory_lib.log_event(store, event.pop("event"), **event)
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["warn_codes"] == {"high_entropy": 2}
+
+
+def test_warn_codes_are_printed_next_to_reject_codes(tmp_path, capsys):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    memory_lib.log_event(store, "write", slug="a", mode="create", chars=400,
+                          warnings=["high_entropy"])
+    memory_stats.main(["--store", str(store)])
+    assert "high_entropy" in capsys.readouterr().out
+
+
 def test_surfaces_the_queries_that_found_nothing(logged):
     s = memory_stats.summarise(memory_stats.read_log(logged, None))
     assert s["zero_hit_searches"] == 1

@@ -87,6 +87,11 @@ def summarise(records: list[dict]) -> dict:
         "rejects": len(rejects),
         "reject_rate": round(len(rejects) / attempts, 3) if attempts else 0.0,
         "reject_codes": dict(Counter(r.get("code", "?") for r in rejects).most_common()),
+        # Shaped exactly like reject_codes: a code that fires constantly is
+        # either a real corpus problem or a rule to loosen, and that is not
+        # visible from the per-line ⚠ text alone.
+        "warn_codes": dict(Counter(
+            code for r in writes for code in r.get("warnings", [])).most_common()),
         "searches": len(searches),
         "zero_hit_searches": len(misses),
         "zero_hit_rate": round(len(misses) / len(searches), 3) if searches else 0.0,
@@ -122,6 +127,9 @@ def main(argv: list[str] | None = None, *, prog: str = "lore stats") -> int:
     print(f"refused   {s['rejects']:>5}   ({s['reject_rate']:.0%} of write attempts)")
     for code, n in s["reject_codes"].items():
         print(f"            {n:>3}  {code}")
+    if s["warn_codes"]:
+        print(f"warned    {sum(s['warn_codes'].values()):>5}   "
+              f"({', '.join(f'{code}:{n}' for code, n in s['warn_codes'].items())})")
     print(f"searches  {s['searches']:>5}   ({s['zero_hit_rate']:.0%} returned nothing)")
     for q in s["zero_hit_queries"]:
         print(f"            miss: {q}")

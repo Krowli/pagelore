@@ -66,10 +66,27 @@ def test_refusal_is_logged_with_a_countable_code(repo):
      "bad_slug"),
     (["--slug", "f", "--title", "T", "--kind", "bug", "--source", "src/real.ts"], None,
      "no_body"),
+    (["--slug", "g", "--title", "T", "--kind", "bug", "--source", "src/real.ts"],
+     LONG + "\nAKIA1234567890ABCDEF", "secret_in_body"),
 ])
 def test_every_refusal_reason_has_its_own_code(repo, args, body, code):
     assert write(repo, *args, body=body) == 1
     assert entries(repo)[-1]["code"] == code
+
+
+def test_a_high_entropy_write_logs_its_warning_code(repo):
+    body = LONG + "\nZk3x9QpL2vB8mR7tN0yC5wJ1hU4sD6eA9gT3iX7oV2z"
+    write(repo, "--slug", "warn-page", "--title", "T", "--kind", "bug",
+          "--source", "src/real.ts", body=body)
+    e = entries(repo)[-1]
+    assert e["event"] == "write"
+    assert e["warnings"] == ["high_entropy"]
+
+
+def test_a_clean_write_has_no_warnings_field(repo):
+    write(repo, "--slug", "clean-page", "--title", "T", "--kind", "bug",
+          "--source", "src/real.ts")
+    assert "warnings" not in entries(repo)[-1]
 
 
 def test_search_is_logged_with_hit_count(repo):

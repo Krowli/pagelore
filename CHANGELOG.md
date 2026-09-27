@@ -6,6 +6,19 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`lore write` refuses a title or body that looks like a committed credential**
+  (AWS access key, classic or fine-grained GitHub token, Anthropic or OpenAI API
+  key, Slack token, PEM private key header), code `secret_in_body`. The refusal
+  names the kind and line number only, never the matched value, since the reason
+  is written to the store's log. A long random-looking string (40+ chars,
+  Shannon entropy ≥ 4.5 bits/char) does not refuse the write — that check has
+  false positives on legitimate long tokens — but warns on stderr after a
+  successful write: `⚠ line N looks like a credential (high-entropy string) —
+  if it is one, remove it and rewrite the page`. `lore stats` gains `warn_codes`,
+  grouped the same way as `reject_codes`.
+
 ## [0.6.0] - 2026-09-27
 
 ### Changed
