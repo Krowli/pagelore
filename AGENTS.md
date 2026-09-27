@@ -1,4 +1,4 @@
-<!-- pagelore 0.6.0 — the block an agent reads every turn. Managed by `lore`: it is
+<!-- pagelore 0.7.0 — the block an agent reads every turn. Managed by `lore`: it is
      rewritten whenever the installed version changes, so edits here are lost. Put your
      own rules in the file that includes this one. Include it by path rather than copying
      it; a copy goes stale on the next release and nothing says so. -->

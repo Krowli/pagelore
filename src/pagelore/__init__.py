@@ -8,4 +8,4 @@
 # Keep this file parseable by any Python 3: no `from __future__`, no annotations,
 # nothing computed. It is read before the interpreter floor has been checked, and
 # by a build backend that must not import it.
-__version__ = "0.6.0"
+__version__ = "0.7.0"
