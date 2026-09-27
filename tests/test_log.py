@@ -100,6 +100,30 @@ def test_search_is_logged_with_hit_count(repo):
     assert e["top"] == "pty-hangs"
 
 
+def test_search_with_touching_logs_touched_count(repo):
+    write(repo, "--slug", "real-page", "--title", "T", "--kind", "bug",
+          "--source", "src/real.ts")
+    memory_search.search("", repo / ".memory", touching=["src/real.ts"])
+    e = entries(repo)[-1]
+    assert e["touching"] == ["src/real.ts"]
+    assert e["touched"] == 1
+
+
+def test_search_touching_a_path_with_no_page_logs_touched_zero(repo):
+    memory_search.search("", repo / ".memory", touching=["src/nope.ts"])
+    e = entries(repo)[-1]
+    assert e["touching"] == ["src/nope.ts"]
+    assert e["touched"] == 0
+
+
+def test_search_without_touching_has_no_touched_field(repo):
+    write(repo, "--slug", "pty-hangs", "--title", "PTY hangs", "--kind", "bug",
+          "--source", "src/real.ts")
+    memory_search.search("pty hangs", repo / ".memory")
+    e = entries(repo)[-1]
+    assert "touched" not in e
+
+
 def test_search_with_no_hits_is_still_logged(repo):
     memory_search.search("kubernetes helm chart", repo / ".memory")
     e = entries(repo)[-1]

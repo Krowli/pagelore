@@ -389,9 +389,16 @@ def search(query: str, store: Path, k: int = 10,
     # telemetry that made it possible to benchmark ranking on real queries rather
     # than invented ones. A search never creates the store — a read-only
     # operation must not dirty a working tree that never opted in.
+    #
+    # `touched` counts the RETURNED hits (after ordering and truncation to k)
+    # whose slug is in last_touching, not len(last_touching) — that would count
+    # touching pages the thin-page filter or the k cutoff dropped before the
+    # agent ever saw them.
     log_event(store, "search", query=query, hits=len(hits),
               top=hits[0][1].slug if hits else None,
-              **({"touching": paths} if paths else {}),
+              **({"touching": paths,
+                  "touched": sum(1 for _, p in hits if p.slug in last_touching)}
+                 if paths else {}),
               **({"skipped": len(last_skipped)} if last_skipped else {}))
     return hits
 

@@ -95,6 +95,95 @@ def test_surfaces_the_queries_that_found_nothing(logged):
     assert s["zero_hit_queries"] == ["kubernetes"]
 
 
+def test_touching_searches_and_misses_are_counted(tmp_path):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    for event in [
+        {"event": "search", "query": "", "hits": 1, "top": "a",
+         "touching": ["src/real.ts"], "touched": 1},
+        {"event": "search", "query": "", "hits": 0, "top": None,
+         "touching": ["src/nope.ts"], "touched": 0},
+        {"event": "search", "query": "pty", "hits": 3, "top": "a"},
+    ]:
+        memory_lib.log_event(store, event.pop("event"), **event)
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["touching_searches"] == 2
+    assert s["touching_measured"] == 2
+    assert s["touching_misses"] == 1
+    assert s["touching_miss_paths"] == [["src/nope.ts"]]
+
+
+def test_touching_search_without_touched_field_is_not_counted_as_a_miss(tmp_path):
+    """Older log lines predate the `touched` field; its absence must not count as
+    measured, and so must not count as a miss either."""
+    store = tmp_path / ".memory"
+    store.mkdir()
+    memory_lib.log_event(store, "search", query="", hits=0, top=None,
+                          touching=["src/old.ts"])
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["touching_searches"] == 1
+    assert s["touching_measured"] == 0
+    assert s["touching_misses"] == 0
+
+
+def test_touching_measured_excludes_pre_field_records_from_the_miss_rate(tmp_path):
+    """A log spanning the introduction of `touched` mixes old lines (no field,
+    unmeasurable) with new ones (field present, one way or the other). The miss
+    count must be read against the measured slice, not against every touching
+    search ever logged — 47 touching searches with only 3 measurable and 1 of
+    those a miss is a 33% miss rate among what can be judged, not 2%."""
+    store = tmp_path / ".memory"
+    store.mkdir()
+    for event in [
+        {"event": "search", "query": "", "hits": 0, "top": None, "touching": ["a"]},
+        {"event": "search", "query": "", "hits": 0, "top": None, "touching": ["b"]},
+        {"event": "search", "query": "", "hits": 1, "top": "x",
+         "touching": ["c"], "touched": 1},
+        {"event": "search", "query": "", "hits": 0, "top": None,
+         "touching": ["d"], "touched": 0},
+    ]:
+        memory_lib.log_event(store, event.pop("event"), **event)
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["touching_searches"] == 4
+    assert s["touching_measured"] == 2
+    assert s["touching_misses"] == 1
+    assert s["touching_miss_paths"] == [["d"]]
+
+
+def test_touching_line_is_printed_when_there_are_touching_searches(tmp_path, capsys):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    memory_lib.log_event(store, "search", query="", hits=0, top=None,
+                          touching=["src/nope.ts"], touched=0)
+    memory_stats.main(["--store", str(store)])
+    out = capsys.readouterr().out
+    assert "touching" in out
+    assert "src/nope.ts" in out
+
+
+def test_touching_line_reads_the_miss_count_against_measured_not_total(tmp_path, capsys):
+    """The exact bug this fixes: a mix of pre-field and measured records must not
+    make the printed miss count look like it is out of the total."""
+    store = tmp_path / ".memory"
+    store.mkdir()
+    for event in [
+        {"event": "search", "query": "", "hits": 0, "top": None, "touching": ["a"]},
+        {"event": "search", "query": "", "hits": 0, "top": None,
+         "touching": ["b"], "touched": 0},
+        {"event": "search", "query": "", "hits": 1, "top": "x",
+         "touching": ["c"], "touched": 1},
+    ]:
+        memory_lib.log_event(store, event.pop("event"), **event)
+    memory_stats.main(["--store", str(store)])
+    out = capsys.readouterr().out
+    assert "3   (2 measured, 1 found no page touching the path)" in out
+
+
+def test_touching_line_is_absent_without_touching_searches(logged, capsys):
+    memory_stats.main(["--store", str(logged)])
+    assert "touching" not in capsys.readouterr().out
+
+
 def test_since_filters_by_date(logged):
     assert memory_stats.read_log(logged, "2099-01-01") == []
     assert memory_stats.read_log(logged, "2000-01-01") != []

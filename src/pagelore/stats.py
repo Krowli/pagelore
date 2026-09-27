@@ -68,6 +68,17 @@ def summarise(records: list[dict]) -> dict:
     attempts = len(writes) + len(rejects)
     misses = [r for r in searches if not r.get("hits")]
 
+    # `touched` is only on records that passed `--touching`, and only from the
+    # point this field shipped. `touching_searches` counts every one of those
+    # (old and new); `touching_measured` is the slice that can actually be
+    # judged. The miss rate is read against `measured`, never against
+    # `touching_searches` — a log spanning the field's introduction otherwise
+    # makes a handful of measured misses look diluted by every old, unmeasurable
+    # line (e.g. 1 miss in 3 measured reads as "2%" if divided by 47 total).
+    touching_searches = [r for r in searches if "touching" in r]
+    touching_measured = [r for r in touching_searches if "touched" in r]
+    touching_misses = [r for r in touching_measured if r.get("touched") == 0]
+
     # A session is whatever the harness stamped as one; lines without a stamp
     # are another harness or an older log, and are not a session. The number to
     # watch is sessions that searched and never wrote — the write side's "did it
@@ -97,6 +108,10 @@ def summarise(records: list[dict]) -> dict:
         "zero_hit_searches": len(misses),
         "zero_hit_rate": round(len(misses) / len(searches), 3) if searches else 0.0,
         "zero_hit_queries": [r.get("query") for r in misses][-15:],
+        "touching_searches": len(touching_searches),
+        "touching_measured": len(touching_measured),
+        "touching_misses": len(touching_misses),
+        "touching_miss_paths": [r.get("touching") for r in touching_misses][-15:],
         "sessions": len(sessions),
         "sessions_unrecorded": unrecorded,
         "writes_per_session": round(attributed / len(sessions), 3) if sessions else 0.0,
@@ -134,6 +149,11 @@ def main(argv: list[str] | None = None, *, prog: str = "lore stats") -> int:
     print(f"searches  {s['searches']:>5}   ({s['zero_hit_rate']:.0%} returned nothing)")
     for q in s["zero_hit_queries"]:
         print(f"            miss: {q}")
+    if s["touching_searches"]:
+        print(f"touching  {s['touching_searches']:>5}   ({s['touching_measured']} measured, "
+              f"{s['touching_misses']} found no page touching the path)")
+        for paths in s["touching_miss_paths"]:
+            print(f"            miss: {', '.join(paths)}")
     print(f"sessions  {s['sessions']:>5}   ({s['sessions_unrecorded']} searched and never "
           f"wrote, {s['writes_per_session']:.2f} writes per session)")
     return 0

@@ -8,6 +8,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`lore search --touching PATH` logs whether it found a page.** The `search`
+  log line gains `touched`: how many of the returned hits were pages whose
+  `sources` named one of the given paths, logged only when `--touching` was
+  given. `lore stats` gains `touching_searches`, `touching_misses` (records
+  with `touched == 0`; a log line from before this field existed is counted as
+  a touching search but never as a miss), and the last 15 missed path lists,
+  printed as a `touching` line next to the existing zero-hit search line.
+
 - **`lore search` and `lore show` mark a page whose `sources` moved on after the
   page did, from git history.** A hit is marked `⚠ source changed: a.py, b.py`
   when a source's last commit is newer than the page file's own, and
