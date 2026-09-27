@@ -83,6 +83,7 @@ def summarise(records: list[dict]) -> dict:
         "writes": len(writes),
         "creates": sum(1 for r in writes if r.get("mode") == "create"),
         "merges": sum(1 for r in writes if r.get("mode") == "merge"),
+        "unchanged": sum(1 for r in writes if r.get("mode") == "unchanged"),
         "median_chars": _median([r.get("chars", 0) for r in writes]),
         "rejects": len(rejects),
         "reject_rate": round(len(rejects) / attempts, 3) if attempts else 0.0,
@@ -123,7 +124,7 @@ def main(argv: list[str] | None = None, *, prog: str = "lore stats") -> int:
 
     print(f"{s['span'][0]} … {s['span'][1]}\n")
     print(f"writes    {s['writes']:>5}   ({s['creates']} new, {s['merges']} merged, "
-          f"median {s['median_chars']} chars)")
+          f"{s['unchanged']} unchanged, median {s['median_chars']} chars)")
     print(f"refused   {s['rejects']:>5}   ({s['reject_rate']:.0%} of write attempts)")
     for code, n in s["reject_codes"].items():
         print(f"            {n:>3}  {code}")

@@ -70,14 +70,14 @@ Every page, newest first, with kind and date; superseded pages are marked.
 lore stats [--store STORE] [--since SINCE] [--json]
 ```
 
-What the store has been doing, from its log: writes (new, merged, median size),
-refusals, searches and the ones that returned nothing, sessions that searched and
-never wrote. `--since` takes an ISO date, e.g. `2026-08-09`.
+What the store has been doing, from its log: writes (new, merged, unchanged,
+median size), refusals, searches and the ones that returned nothing, sessions
+that searched and never wrote. `--since` takes an ISO date, e.g. `2026-08-09`.
 
 ```
 2026-08-17T18:31:03 … 2026-09-16T23:35:03
 
-writes       24   (19 new, 5 merged, median 1536 chars)
+writes       24   (19 new, 5 merged, 0 unchanged, median 1536 chars)
 refused       0   (0% of write attempts)
 searches     41   (7% returned nothing)
             miss: terminal pane rendering Zenith Tauri
@@ -118,6 +118,13 @@ store's parent) first, then the current directory.
 Re-running the same slug replaces same-header sections in place and appends new
 ones, printing `replaced:` and `appended:` for each, so amendments are cheap and
 safe. Concurrent writers on one slug are serialised by a per-page lock.
+
+A re-run that would produce the exact same page — same title, kind, sources and
+body — does not touch the file or its `updated` date: it prints `unchanged:
+nothing to write` on stderr instead, still exits 0, and still prints the path.
+Otherwise the same no-op write would look like a fresh edit later, to `git log`
+and to anything that treats a recent `updated` as a sign the page was checked
+against the code again.
 
 **Writes are refused, not requested.** Asking an agent in prose to keep a
 knowledge base tidy does not work — measured on a real corpus it produced 104

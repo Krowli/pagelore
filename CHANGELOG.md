@@ -19,6 +19,15 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   if it is one, remove it and rewrite the page`. `lore stats` gains `warn_codes`,
   grouped the same way as `reject_codes`.
 
+### Fixed
+
+- **`lore write` no longer bumps `updated` on a byte-identical rewrite.**
+  Re-running the exact same slug/title/kind/sources/body used to still refresh
+  the date and rewrite the file, which made a no-op re-run look like a real
+  edit to `git log` and to anything using `updated` as a staleness signal.
+  Prints `unchanged: nothing to write` on stderr, still exits 0. `lore stats`
+  gains an `unchanged` count next to `new`/`merged`.
+
 ## [0.6.0] - 2026-09-27
 
 ### Changed

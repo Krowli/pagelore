@@ -39,6 +39,7 @@ from .lib import (
     log_event,
     page_lock,
     parse_page,
+    read_text,
     store_problem,
 )
 
@@ -308,10 +309,21 @@ def render_frontmatter(meta: dict) -> str:
 # possible lost section for a command that never returns.
 UNLOCKED_RETRIES = 3
 
+# Whether the last write_page() call found the candidate page byte-identical to
+# what was already on disk and skipped the write. Module state like search.py's
+# `last_path`/`last_touching`, so write_page's return type (and its ~15 call
+# sites across tests and evals/run.py) stay a bare `Path`: the decision is made
+# once, inside the lock, against the file read under that same lock — a second,
+# unlocked before/after read in main() could disagree with it under a
+# concurrent writer.
+last_unchanged = False
+
 
 def write_page(store: Path, slug: str, title: str, kind: str,
                sources: list[str], body: str,
                supersedes: list[str] | None = None) -> Path:
+    global last_unchanged
+    last_unchanged = False
     if not SLUG_RE.match(slug):
         raise ValueError(
             f"invalid slug {slug!r}: lowercase letters, digits and single hyphens only")
@@ -332,7 +344,12 @@ def write_page(store: Path, slug: str, title: str, kind: str,
             meta: dict = {}
             result = MergeResult(body=body)
             merged_sources, merged_supersedes = sources, supersedes
+            existing_text: str | None = None
             if path.exists():
+                # Tolerant read (replaces a bad byte, retries a Windows sharing
+                # violation): a page with one non-UTF-8 byte in it must still be
+                # rewritable, exactly as it was before this comparison existed.
+                existing_text = read_text(path)
                 existing = parse_page(path)
                 meta = dict(existing.meta)
                 result = merge(existing.body, body)
@@ -341,10 +358,22 @@ def write_page(store: Path, slug: str, title: str, kind: str,
                                            | set(meta.get("supersedes") or []))
             meta.update({
                 "slug": slug, "title": " ".join(title.split()), "kind": kind,
-                "created": meta.get("created", today), "updated": today,
+                "created": meta.get("created", today), "updated": meta.get("updated", today),
                 "sources": merged_sources, "supersedes": merged_supersedes or [],
             })
-            atomic_write(path, render_frontmatter(meta) + result.body.strip() + "\n")
+            new_body = result.body.strip() + "\n"
+            # Render with the PRIOR `updated` first and compare against the file as
+            # read under this same lock. Byte-identical means nothing changed, so
+            # nothing is written — a rewrite that changes nothing must not look
+            # different from the page already on disk, or a no-op re-run bumps the
+            # date, creates a commit, and later "refreshes" a page that the later
+            # staleness check should instead have flagged.
+            candidate = render_frontmatter(meta) + new_body
+            if existing_text is not None and candidate == existing_text:
+                last_unchanged = True
+                return path
+            meta["updated"] = today
+            atomic_write(path, render_frontmatter(meta) + new_body)
             if lock.held:
                 return path
 
@@ -605,14 +634,25 @@ def main(argv: list[str] | None = None, *, prog: str = "lore write") -> int:
                       "check permissions and free space on that path, then retry",
                       args.slug)
 
+    # write_page is the single authority on this: it decided under its own
+    # lock, against the file as read under that lock. A second before/after
+    # read here raced it — under a concurrent writer between the two reads, a
+    # call that write_page genuinely skipped could still be reported as a
+    # merge, or vice versa.
+    unchanged = last_unchanged
+
     log_event(store, "write", create=True, slug=args.slug, kind=args.kind,
-              mode="merge" if existed else "create", chars=len(body.strip()),
+              mode="unchanged" if unchanged else ("merge" if existed else "create"),
+              chars=len(body.strip()),
               replaced=result.replaced, supersedes=args.supersedes,
               **({"warnings": warnings} if warnings else {}))
-    for header in result.replaced:
-        print(f"replaced: {header}", file=sys.stderr)
-    for header in result.appended:
-        print(f"appended: {header}", file=sys.stderr)
+    if unchanged:
+        print("unchanged: nothing to write", file=sys.stderr)
+    else:
+        for header in result.replaced:
+            print(f"replaced: {header}", file=sys.stderr)
+        for header in result.appended:
+            print(f"appended: {header}", file=sys.stderr)
     for slug in args.supersedes:
         print(f"superseded: {slug}", file=sys.stderr)
     for loc in warn_locations:

@@ -43,6 +43,28 @@ def test_groups_refusals_by_code(logged):
     assert s["reject_codes"] == {"no_sources": 2, "body_too_short": 1}
 
 
+def test_counts_unchanged_writes_separately_from_creates_and_merges(tmp_path):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    for event in [
+        {"event": "write", "slug": "a", "mode": "create", "chars": 400},
+        {"event": "write", "slug": "a", "mode": "unchanged", "chars": 400},
+    ]:
+        memory_lib.log_event(store, event.pop("event"), **event)
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["unchanged"] == 1
+    assert s["creates"] == 1
+    assert s["merges"] == 0
+
+
+def test_unchanged_is_printed_next_to_creates_and_merges(tmp_path, capsys):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    memory_lib.log_event(store, "write", slug="a", mode="unchanged", chars=400)
+    memory_stats.main(["--store", str(store)])
+    assert "unchanged" in capsys.readouterr().out
+
+
 def test_warn_codes_are_grouped_like_reject_codes(tmp_path):
     store = tmp_path / ".memory"
     store.mkdir()
