@@ -119,7 +119,9 @@ def test_an_old_variable_still_works_and_says_it_is_going(machine, monkeypatch, 
     assert lib.env(lib.STORE_ENV) == "/old"
     err = capsys.readouterr().err
     assert err.count("PROJECT_MEMORY_DIR is deprecated, use PAGELORE_DIR") == 1
-    assert "0.7.0" in err
+    # Old names keep working until a release removes them; the warning must not
+    # promise a version that has already shipped with them still working.
+    assert "a future release" in err and "0.7.0" not in err
 
     monkeypatch.setenv("PAGELORE_DIR", "/new")
     assert lib.env(lib.STORE_ENV) == "/new"

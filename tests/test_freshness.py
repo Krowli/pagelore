@@ -9,6 +9,7 @@ wherever the command happens to run.
 """
 from __future__ import annotations
 
+import datetime
 import locale
 import os
 import subprocess
@@ -136,8 +137,8 @@ def test_uncommitted_page_skips_changed_but_still_reports_gone(repo):
     (repo / "src" / "b.py").unlink()
 
     result = freshness.drift(lib.load_pages(store), store)
-    # No page commit to compare against, so "changed" cannot fire for src/a.py —
-    # but "gone" needs no page commit at all, only that git itself answered.
+    # The page was never committed, so its mtime (just now) is compared, and it is
+    # newer than src/a.py's 2020 commit — not "changed". "gone" needs no page time.
     assert result == {"p": {"changed": [], "gone": ["src/b.py"]}}
 
 
@@ -325,3 +326,54 @@ def test_markers_do_not_leak_between_two_consecutive_searches(repo):
     assert [p.slug for _, p in fresh_hits] == ["kernel-panic-report"]
     memory_search.annotate(fresh_hits, store)
     assert "widget-latency-issue" not in memory_search.last_drift
+
+
+# The default store is gitignored and a home store lives outside the repo, so for
+# most users the page itself is never committed. Its file's mtime is then the time
+# it was last written — a clone never creates it, so the mtime cannot be a checkout
+# time — and that is what `changed` compares a source's last commit against.
+
+def _age(path, when):
+    ts = datetime.datetime.fromisoformat(when).timestamp()
+    os.utime(path, (ts, ts))
+
+
+def test_a_page_never_committed_is_compared_by_its_mtime(repo):
+    store = repo / ".memory"
+    store.mkdir()
+    (repo / ".gitignore").write_text(".memory/\n", encoding="utf-8")
+    commit(repo, "src/a.py", "2020-01-01T00:00:00")
+    write_page(store, "p", ["src/a.py"])
+    _age(store / "p.md", "2020-01-02T00:00:00")
+    commit(repo, "src/a.py", "2020-01-03T00:00:00")
+
+    assert freshness.drift(lib.load_pages(store), store) == \
+        {"p": {"changed": ["src/a.py"], "gone": []}}
+
+
+def test_a_page_written_after_the_source_commit_is_not_marked(repo):
+    store = repo / ".memory"
+    store.mkdir()
+    (repo / ".gitignore").write_text(".memory/\n", encoding="utf-8")
+    commit(repo, "src/a.py", "2020-01-03T00:00:00")
+    write_page(store, "p", ["src/a.py"])
+    _age(store / "p.md", "2020-01-04T00:00:00")
+
+    assert freshness.drift(lib.load_pages(store), store) == {}
+
+
+def test_a_home_store_outside_the_repo_is_still_checked(repo, tmp_path):
+    outside = tmp_path / "home-store"
+    outside.mkdir()
+    store = repo / ".memory"
+    try:
+        store.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks need privileges on this platform")
+    commit(repo, "src/a.py", "2020-01-01T00:00:00")
+    write_page(store, "p", ["src/a.py"])
+    _age(outside / "p.md", "2020-01-02T00:00:00")
+    commit(repo, "src/a.py", "2020-01-03T00:00:00")
+
+    assert freshness.drift(lib.load_pages(store), store) == \
+        {"p": {"changed": ["src/a.py"], "gone": []}}

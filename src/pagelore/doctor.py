@@ -46,11 +46,11 @@ from .init import (
     agent_files,
     codex_home,
     codex_registered,
+    legacy_installs,
     registered_in_json,
+    remembered_projects,
 )
 from .lib import find_store, page_paths
-
-LEGACY_SKILL = Path.home() / ".agents" / "skills" / "project-memory"
 
 
 def _mcp_registrations(root: Path | None,
@@ -298,10 +298,11 @@ def findings() -> list[dict]:
 
     out.extend(_home_findings())
 
-    if LEGACY_SKILL.exists():
+    for kind, path in legacy_installs([r for r in (root, *remembered_projects()) if r]):
+        what = "its hooks in" if kind == "hooks" else "a copy at"
         out.append({"check": "legacy", "ok": False,
-                    "detail": f"{LEGACY_SKILL} is left over from the skill-directory layout"
-                              " and is safe to delete"})
+                    "detail": f"an older pagelore (project-memory) is still wired in: {what} "
+                              f"{path} — it runs beside this one; `lore uninstall` removes it"})
     return out
 
 

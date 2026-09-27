@@ -6,6 +6,24 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`⚠ source changed` now works in the default store mode.** A page that is never
+  committed — the default gitignored store, a `home` store, a page not committed
+  yet — is compared by its file's modification time instead of being skipped. In
+  0.8.0 and 0.8.1 only `⚠ source gone` could appear for those pages.
+- **An older copied install is found and removed.** Releases up to 0.3.x were a
+  `project-memory` skill copied into `~/.agents/skills/` or a project's
+  `.agents/skills/`, with hooks in `.claude/settings.json`; those scripts keep
+  working after an upgrade and run beside the current program. `lore uninstall`
+  now removes the copy, its `.claude/skills/` link and its hooks (other hooks and
+  settings are kept), globally and in every known project; `lore doctor` reports
+  them and `lore init` warns. A `project-memory` directory without the old scripts
+  is left alone.
+- **The warning for a pre-0.6.0 variable name no longer promises 0.7.0.** The old
+  names (`PROJECT_MEMORY_*`) still work; the warning now says they stop working in
+  a future release.
+
 ## [0.8.1] - 2026-09-27
 
 ### Fixed

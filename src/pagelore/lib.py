@@ -61,7 +61,7 @@ class StoreUnavailable(Exception):
 def env(name: str) -> str | None:
     """`$PAGELORE_<X>`, else the pre-0.6.0 `$PROJECT_MEMORY_<X>`, else None.
 
-    The old name still works for this minor release so that a shell profile or an
+    The old name still works, until a release removes it, so that a shell profile or an
     MCP config written for 0.5 does not silently stop applying on upgrade. It says so
     once per process, on stderr: stdout is `--json` output or an MCP stream, and a
     line there would corrupt it.
@@ -74,7 +74,7 @@ def env(name: str) -> str | None:
     if value and old not in _warned_env:
         _warned_env.add(old)
         print(f"pagelore: {old} is deprecated, use {name}; the old name stops working "
-              "in 0.7.0", file=sys.stderr)
+              "in a future release", file=sys.stderr)
     return value or None
 
 

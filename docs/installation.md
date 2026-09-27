@@ -93,7 +93,8 @@ pipx uninstall pagelore        # or: npm uninstall -g pagelore, uv tool uninstal
 behind as an `@include` pointing at a file nothing will recreate — and an agent
 that cannot load an `@path` does not error, it just stops searching.
 
-`lore uninstall` removes only what `lore init` wrote:
+`lore uninstall` removes only what `lore init` wrote, plus what a pre-0.4.0 copied
+install left behind:
 
 - the fenced block in `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md` and
   `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`), and in the `CLAUDE.md`,
@@ -109,6 +110,12 @@ that cannot load an `@path` does not error, it just stops searching.
   --scope user pagelore` / `codex mcp remove pagelore` (and the same for
   `project-memory`) when that program is on PATH, and prints the command when it
   is not.
+- a pre-0.4.0 `project-memory` skill copy — `~/.agents/skills/project-memory`,
+  a project's `.agents/skills/project-memory`, and the `.claude/skills/` links to
+  them — but only a directory that carries the old `scripts/memory_search.py`;
+- the hooks that copy wrote into `~/.claude/settings.json` or a project's
+  `.claude/settings.json` (the ones tagged `_managed_id: project-memory-…`); every
+  other hook and setting in those files stays.
 
 `lore uninstall --yes` also removes pagelore's own files in `~/.pagelore/` — the
 block `AGENT.md` and its `.version` stamp — and then the directory itself if that

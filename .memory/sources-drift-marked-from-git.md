@@ -68,25 +68,27 @@ single long-lived process serving many searches in a row.
 
 ## Where it does not reach
 
-Ranking is untouched: a stale or gone-sourced page is not demoted, only marked
-— `evals/run.py --by-type` produces byte-identical output before and after,
-since it never calls `annotate()`. The check is a pure add-on to the two places
+Ranking is untouched: a stale or gone-sourced page is not demoted, only marked.
+`evals/run.py --by-type` produces byte-identical output before and after,
+because it never calls `annotate()`. The check is a pure add-on to the two places
 that print a finished hit list: `format_hit` and `lore show`.
 
-`changed` needs the store itself to be committed to git, since it compares the
-page file's own last commit against each source's. `lore init`'s default store
-mode adds `.memory/` to `.gitignore` (`lib.ensure_store`), and a `home` store
-lives outside the repository entirely — in both, pages are never committed, so
-`changed` never fires there, only `gone` (a filesystem check, not a git one).
-This is not a bug and there is no fallback planned: a marker that needs commit
-history has nothing to read when the thing it marks was never committed.
+A page that was never committed — the default gitignored store
+(`lib.ensure_store` adds `.memory/` to `.gitignore`), a `home` store outside the
+repository, or a page not committed yet — is compared by its file's mtime
+instead of a commit time. A clone never creates such a file, so its mtime is the
+time it was last written, not a checkout time; a tracked page keeps using its
+commit time for exactly that reason. Until 0.8.2 such pages were skipped and
+only `gone` could appear for them, which left `changed` dead in the default
+mode. The first fix only documented the limit; it was then fixed.
 
-Two more spellings `_matchable` does not paper over: a source cited as a
-directory (e.g. `--source src/widgets`) never gets `changed`, because
-`git log --name-only` prints the individual file paths a commit touched, never
-the directory argument itself — so the directory string as cited on the page
-never appears in git's output to match against. And a source cited with
-Windows-style backslashes (`src\a.py`) never matches either: git always prints
-pathspecs with forward slashes regardless of platform, and `_matchable` uses
-`posixpath.normpath`, which does not treat `\` as a separator at all, so the
-two spellings are never brought together.
+Two more spellings `_matchable` does not paper over:
+
+- A source cited as a directory (e.g. `--source src/widgets`) never gets
+  `changed`. `git log --name-only` prints the individual file paths a commit
+  touched, never the directory argument itself, so the directory string cited
+  on the page never appears in git's output to match against.
+- A source cited with Windows-style backslashes (`src\a.py`) never matches
+  either. Git always prints paths with forward slashes regardless of platform,
+  and `_matchable` uses `posixpath.normpath`, which does not treat `\` as a
+  separator at all, so the two spellings are never brought together.
