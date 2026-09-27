@@ -40,6 +40,17 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   successful write: `⚠ line N looks like a credential (high-entropy string) —
   if it is one, remove it and rewrite the page`. `lore stats` gains `warn_codes`,
   grouped the same way as `reject_codes`.
+- **A "looks like an existing page" warning on `lore write` was measured and
+  not built.** `evals/duplicate_probe.py` first measured Jaccard and TF-IDF
+  cosine over tokenized title+body per *pair* (11 supersedes pairs as
+  positives against the eval corpus's other 3994 pairs), which looked
+  promising — Jaccard reached 0.818 recall at a 0.93% false-positive rate. But
+  the write path does not compare one pair: it compares one new page against
+  every other page in the store and warns on the single best match, which is
+  90 chances per write for an unrelated page to score high by accident, not
+  one. Re-measured per write, recall collapsed to 0.09 (jaccard) / 0.00
+  (tfidf cosine) at the same 1%-false-warnings budget — below the 0.5 floor
+  the decision was made against. See `.memory/duplicate-warning-measured.md`.
 
 ### Fixed
 
