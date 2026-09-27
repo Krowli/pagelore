@@ -72,3 +72,21 @@ Ranking is untouched: a stale or gone-sourced page is not demoted, only marked
 — `evals/run.py --by-type` produces byte-identical output before and after,
 since it never calls `annotate()`. The check is a pure add-on to the two places
 that print a finished hit list: `format_hit` and `lore show`.
+
+`changed` needs the store itself to be committed to git, since it compares the
+page file's own last commit against each source's. `lore init`'s default store
+mode adds `.memory/` to `.gitignore` (`lib.ensure_store`), and a `home` store
+lives outside the repository entirely — in both, pages are never committed, so
+`changed` never fires there, only `gone` (a filesystem check, not a git one).
+This is not a bug and there is no fallback planned: a marker that needs commit
+history has nothing to read when the thing it marks was never committed.
+
+Two more spellings `_matchable` does not paper over: a source cited as a
+directory (e.g. `--source src/widgets`) never gets `changed`, because
+`git log --name-only` prints the individual file paths a commit touched, never
+the directory argument itself — so the directory string as cited on the page
+never appears in git's output to match against. And a source cited with
+Windows-style backslashes (`src\a.py`) never matches either: git always prints
+pathspecs with forward slashes regardless of platform, and `_matchable` uses
+`posixpath.normpath`, which does not treat `\` as a separator at all, so the
+two spellings are never brought together.

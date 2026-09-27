@@ -81,9 +81,12 @@ rotate. Neither needs the value itself.
 
 ## What `lore stats` had to learn
 
-The log gets a new field, `warnings: [codes]`, written only when non-empty
-(currently ever just `["high_entropy"]`). Per [[log-and-reader-ship-together]],
-a log field ships with its reader in the same change: `summarise()` in
-`stats.py` now returns `warn_codes`, grouped exactly like `reject_codes`
-(a `Counter` over the codes seen across `write` events), and the text output
-prints a `warned` line next to the `refused` one.
+The log gets a new field, `warnings: [codes]`, written only when non-empty.
+At the time this was written the only code was `high_entropy`; `dangling_link`
+(see [[links-checked-not-refused]]) now shares the same field, so the two
+codes can appear together on one write event. Per
+[[log-and-reader-ship-together]], a log field ships with its reader in the
+same change: `summarise()` in `stats.py` now returns `warn_codes`, grouped
+exactly like `reject_codes` (a `Counter` over the codes seen across `write`
+events, whatever they are), and the text output prints a `warned` line next to
+the `refused` one.

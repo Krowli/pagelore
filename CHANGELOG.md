@@ -11,10 +11,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`lore search --touching PATH` logs whether it found a page.** The `search`
   log line gains `touched`: how many of the returned hits were pages whose
   `sources` named one of the given paths, logged only when `--touching` was
-  given. `lore stats` gains `touching_searches`, `touching_misses` (records
-  with `touched == 0`; a log line from before this field existed is counted as
-  a touching search but never as a miss), and the last 15 missed path lists,
-  printed as a `touching` line next to the existing zero-hit search line.
+  given. `lore stats` gains `touching_searches` (every search that passed
+  `--touching`, old logs included), `touching_measured` (the slice of those
+  that also carry `touched`, i.e. logged after this field shipped — the miss
+  rate is read against this, not against `touching_searches`, so a handful of
+  measured misses is not diluted by every old, unmeasurable line),
+  `touching_misses` (records with `touched == 0`), and the last 15 missed path
+  lists, printed as a `touching` line — `touching N (M measured, K found no
+  page touching the path)` — next to the existing zero-hit search line.
 
 - **`lore search` and `lore show` mark a page whose `sources` moved on after the
   page did, from git history.** A hit is marked `⚠ source changed: a.py, b.py`
@@ -28,6 +32,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   source against, so the feature stays silent rather than guess. The check runs
   once per search, after ranking is done, not inside `search()` itself, so
   `evals/run.py` (hundreds of `search()` calls per run) pays nothing for it.
+  `changed` needs the store itself to be committed to git — the default,
+  gitignored store mode and a `home` store (outside the repo) never commit
+  pages, so only `gone` appears there; this is not a bug, there is no fallback.
 
 - **`[[slug]]` links are now parsed, checked and surfaced.** `lore write` warns,
   code `dangling_link`, when a `[[slug]]` in the resulting page names no page in
@@ -38,6 +45,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pages, sorted, whose `[[slug]]` names the page being shown; stdout is
   unchanged, still byte-identical to the file. A link inside a fenced code
   block or an inline code span is read as literal text, not a cross-reference.
+
 - **`lore write` refuses a title or body that looks like a committed credential**
   (AWS access key, classic or fine-grained GitHub token, Anthropic or OpenAI API
   key, Slack token, PEM private key header), code `secret_in_body`. The refusal
@@ -45,8 +53,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   is written to the store's log. A long random-looking string (40+ chars,
   Shannon entropy ≥ 4.5 bits/char) does not refuse the write — that check has
   false positives on legitimate long tokens — but warns on stderr after a
-  successful write: `⚠ line N looks like a credential (high-entropy string) —
-  if it is one, remove it and rewrite the page`. `lore stats` gains `warn_codes`,
+  successful write: `⚠ body line N looks like a credential (high-entropy
+  string) — if it is one, remove it and rewrite the page` (or `⚠ title looks
+  like a credential …` for the title). `lore stats` gains `warn_codes`,
   grouped the same way as `reject_codes`.
 - **A "looks like an existing page" warning on `lore write` was measured and
   not built.** `evals/duplicate_probe.py` first measured Jaccard and TF-IDF

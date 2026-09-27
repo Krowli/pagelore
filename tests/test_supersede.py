@@ -121,6 +121,36 @@ def test_a_superseded_hit_says_so_in_the_result_line(store):
     assert "superseded by auth-strategy-v2" in memory_search.format_hit(1.0, old)
 
 
+def test_repeating_an_identical_supersede_leaves_the_old_page_untouched(store, monkeypatch):
+    """`write_page` already skips the byte-identical rewrite of the *new* page, but
+    `stamp_superseded` ran unconditionally on the *old* one — so an identical
+    `--supersedes` re-run still rewrote it and bumped its `updated`, even though
+    nothing about the supersession changed. Bytes alone would not catch this: a
+    same-day rewrite stamps the same date and comes out byte-identical anyway, so
+    the assertion patches `atomic_write` to prove the old page's file was never
+    even touched the second time."""
+    write(store, "auth-strategy", "Auth uses server-side sessions", "## Decision\n\n" + LONG)
+    write(store, "auth-jwt-migration", "Auth moves to JWT", "## Decision\n\n" + LONG,
+          supersedes="auth-strategy")
+
+    old_path = store / "auth-strategy.md"
+    before_bytes = old_path.read_bytes()
+
+    written_paths = []
+    real_atomic_write = memory_write.atomic_write
+
+    def spy(path, text):
+        written_paths.append(path)
+        return real_atomic_write(path, text)
+    monkeypatch.setattr(memory_write, "atomic_write", spy)
+
+    assert write(store, "auth-jwt-migration", "Auth moves to JWT", "## Decision\n\n" + LONG,
+                 supersedes="auth-strategy") == 0
+
+    assert old_path not in written_paths
+    assert old_path.read_bytes() == before_bytes
+
+
 def test_superseding_a_page_that_does_not_exist_is_refused(store):
     rc = write(store, "auth-jwt", "Auth moves to JWT", "## Decision\n\n" + LONG,
                supersedes="never-existed")

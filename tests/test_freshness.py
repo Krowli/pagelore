@@ -228,6 +228,48 @@ def test_a_dot_slash_prefixed_source_is_still_matched(repo):
     assert result == {"p": {"changed": ["./src/a.py"], "gone": []}}
 
 
+def test_a_source_outside_the_repo_does_not_blank_every_other_hit(repo):
+    """`git log -- <path outside the worktree>` exits 128 ("outside repository"),
+    which used to make `last_commits` return None for the whole call — so one page
+    citing an out-of-repo source (accepted by `write.validate`, which only checks
+    that the target exists on disk) silently killed `changed` for every page, not
+    just its own."""
+    store = repo / ".memory"
+    store.mkdir()
+    (repo.parent / "outside.txt").write_text("x", encoding="utf-8")
+    write_page(store, "outsider", ["../outside.txt"])
+    commit_page(repo, store, "outsider", "2020-01-01T00:00:00")
+
+    commit(repo, "src/a.py", "2020-01-01T00:00:00")
+    write_page(store, "p", ["src/a.py"])
+    commit_page(repo, store, "p", "2020-01-02T00:00:00")
+    commit(repo, "src/a.py", "2020-01-03T00:00:00")
+
+    result = freshness.drift(lib.load_pages(store), store)
+    assert result.get("p") == {"changed": ["src/a.py"], "gone": []}
+
+
+def test_two_spellings_of_one_source_both_get_marked_changed(repo):
+    """`p1` cites `src/a.py`, `p2` cites `./src/a.py` — different strings, same
+    file. `last_commits` used to key its result by the normalised form and keep
+    only one original spelling per key, so whichever page's spelling did not
+    survive that collision silently never got a timestamp back."""
+    store = repo / ".memory"
+    store.mkdir()
+    commit(repo, "src/a.py", "2020-01-01T00:00:00")
+    write_page(store, "p1", ["src/a.py"])
+    commit_page(repo, store, "p1", "2020-01-02T00:00:00")
+    write_page(store, "p2", ["./src/a.py"])
+    commit_page(repo, store, "p2", "2020-01-02T00:00:00")
+    commit(repo, "src/a.py", "2020-01-03T00:00:00")
+
+    result = freshness.drift(lib.load_pages(store), store)
+    assert result == {
+        "p1": {"changed": ["src/a.py"], "gone": []},
+        "p2": {"changed": ["./src/a.py"], "gone": []},
+    }
+
+
 def test_output_bytes_invalid_for_the_locale_encoding_do_not_crash(monkeypatch):
     """`core.quotePath=false` makes git emit raw UTF-8 path bytes instead of
     C-style octal escapes. On a non-UTF-8 locale (`cp1252`, still the Windows

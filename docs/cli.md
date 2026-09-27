@@ -56,6 +56,12 @@ appears at all outside a git work tree — no repository, no `git` binary, a
 timed-out call — because `gone` cannot be decided reliably without the project
 root, and that root is only known here because git named it.
 
+`changed` is decided by comparing git commit times, so it needs the store
+itself to be committed. The default store mode (`lore init`'s default) adds
+`.memory/` to `.gitignore`, and a `home` store lives outside the repo
+entirely — in both, pages are never committed, so `changed` never fires; only
+`gone` (decided from the filesystem, not git) still appears.
+
 ### `lore show <slug>`
 
 ```

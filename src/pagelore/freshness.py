@@ -60,6 +60,24 @@ def _matchable(path: str) -> str:
     return unicodedata.normalize("NFC", posixpath.normpath(path))
 
 
+def _inside_root(path: str) -> bool:
+    """Whether a root-relative citation still names something inside the root
+    after normalisation — not merely whether the string starts with `..`.
+
+    `git log -- <pathspec>` exits 128 ("outside repository") the moment *any*
+    one pathspec in the call resolves outside the worktree, and `last_commits`
+    treats a non-zero exit as "git could not answer" and returns None for the
+    *whole* call — so a single page citing `--source ../secrets.txt` or
+    `--source /etc/hosts` (both accepted by `write.validate`, which only checks
+    that the target exists on disk, not that it is inside the repo) used to
+    blank `changed` for every page, not just its own. `drift` calls this to
+    keep such a source out of the paths it hands to git; `gone` still checks it
+    via `resolve_source`, which is unaffected.
+    """
+    norm = posixpath.normpath(path)
+    return not posixpath.isabs(norm) and norm != ".." and not norm.startswith("../")
+
+
 def last_commits(root: Path, paths: list[str]) -> dict[str, int] | None:
     """The committer time of the newest commit touching each of `paths`, or None
     if git could not answer at all (not a repository, no git binary, a timeout).
@@ -118,7 +136,14 @@ def last_commits(root: Path, paths: list[str]) -> dict[str, int] | None:
     if result.returncode != 0:
         return None  # not a repository, or none of this ever happened to commit
 
-    by_match = {_matchable(p): p for p in paths}  # last spelling wins on a collision
+    # Two different callers can cite the same file under different spellings
+    # (`src/a.py` and `./src/a.py` both normalise to one key) — every original
+    # spelling that shares a key has to get the timestamp, not just whichever
+    # one happened to be recorded last, or the other page's `changed` never
+    # fires for it.
+    by_match: dict[str, list[str]] = {}
+    for p in paths:
+        by_match.setdefault(_matchable(p), []).append(p)
     remaining = set(by_match)
     out: dict[str, int] = {}
     for chunk in result.stdout.split("\0"):
@@ -132,7 +157,8 @@ def last_commits(root: Path, paths: list[str]) -> dict[str, int] | None:
         for name in rest.splitlines():
             key = _matchable(name)
             if key in remaining:
-                out[by_match[key]] = ts
+                for spelling in by_match[key]:
+                    out[spelling] = ts
                 remaining.discard(key)
     return out
 
@@ -172,7 +198,10 @@ def drift(pages: list[Page], store: Path) -> dict[str, dict[str, list[str]]]:
             continue
         page_rel[page.slug] = rel
         paths.add(rel)
-        paths.update(str(s) for s in (page.meta.get("sources") or []))
+        for s in (page.meta.get("sources") or []):
+            s = str(s)
+            if _inside_root(s):
+                paths.add(s)
 
     commits = last_commits(root, sorted(paths))
     if commits is None:

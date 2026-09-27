@@ -7,6 +7,7 @@ updated: 2026-09-27
 sources:
   - src/pagelore/lib.py
   - src/pagelore/show.py
+  - src/pagelore/write.py
 ---
 
 ## Why a dangling link warns instead of refusing
@@ -20,7 +21,7 @@ write still succeeds, exit code 0.
 This has to be a warning, not a refusal through `reject()`, because the write
 order two related pages come out in is not under the tool's control. An agent
 investigating an incident often writes the explanation (page A, "the bug was
-X, see [[the-decision-that-caused-it]]") before it writes the decision page
+X, see `[[the-decision-that-caused-it]]`") before it writes the decision page
 itself (page B) — sometimes in the same session, sometimes days apart if B
 needs more digging. Refusing A's write until B exists would force an artificial
 order or an empty stub for B just to satisfy the gate, which is exactly the

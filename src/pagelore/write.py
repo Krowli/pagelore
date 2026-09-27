@@ -398,6 +398,14 @@ def stamp_superseded(store: Path, slug: str, by_slug: str) -> None:
     path = store / f"{slug}.md"
     with page_lock(path):
         page = parse_page(path)
+        # An identical re-run of the same --supersedes (write_page already skips
+        # the byte-identical rewrite of the *new* page; this is the same idea for
+        # the *old* one) must not rewrite a file or bump its `updated` for a
+        # supersession that already holds — or a no-op re-run would falsely
+        # "refresh" a page nobody touched, the same staleness-hiding bug the
+        # unchanged-write check exists to prevent.
+        if page.meta.get("status") == "superseded" and page.meta.get("superseded_by") == by_slug:
+            return
         meta = dict(page.meta)
         meta.update({"slug": page.slug, "title": page.title, "status": "superseded",
                      "superseded_by": by_slug, "updated": _dt.date.today().isoformat()})
