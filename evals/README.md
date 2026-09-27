@@ -158,12 +158,20 @@ the import graph (FILE imports X, or X imports FILE, and X *is* cited) would fin
 real pages more often than noise, on a real repository with a real `.memory/`.
 It parses Python (`ast`), TS/JS (regex, relative specifiers only) and Rust
 (`mod`/`use crate`/`super`/`self`) well enough to build that graph from
-`git ls-files`, then reports coverage, reach, noise at three hub caps and a
-leave-one-out recall, against a build threshold fixed before any repository was
-measured. Run on this repository itself the answer is "do not build": reach and
-leave-one-out recall both come in under threshold, because coverage here is
-already high enough (most source files are already cited directly) that few
-files are left for a graph hop to rescue.
+`git ls-files`, then reports coverage once, plus reach, leave-one-out recall and
+noise (median group size over non-empty groups) computed separately at each of
+three hub caps — inf, 10, 5; a hub is a file imported by more than N others, and
+a hub neighbour is dropped from a group rather than counted, since one hop from
+a widely-shared module says nothing specific. The verdict picks the first cap,
+in that order, whose three numbers all clear a build threshold fixed before any
+repository was measured — not cap inf unconditionally, because the shipped
+feature would use whichever cap the probe recommends. Run on this repository
+itself the answer is "build (hub cap 10)": at cap inf every widely-imported
+module (`cli.py`, `lib.py`, `search.py`, ...) drags in every page that mentions
+it, so the median non-empty group is 9 pages — well over the noise threshold —
+but capping at 10 drops just enough of that traffic to bring it down to 1 page
+while reach (32%) and leave-one-out recall (55%) still clear their thresholds
+comfortably.
 
 ## Regenerating the corpus
 

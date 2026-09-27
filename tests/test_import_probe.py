@@ -125,17 +125,18 @@ def test_metrics_on_the_synthetic_repo(repo):
     assert result["n_uncited"] == 5
 
     # b.py is one hop from the cited a.py; x.ts/y.ts and lib.rs/m.rs only reach
-    # each other, which nothing cites.
-    assert result["reach"] == pytest.approx(1 / 5)
-    assert result["noise"][None]["median"] == pytest.approx(0.0)
-    # only b.py's group is non-empty (size 2: page-a and page-ac both cite a.py)
-    assert result["median_nonempty_group"] == pytest.approx(2.0)
-
-    # page-ac cites two files; dropping either one still finds it through the
-    # other, via the one-hop group around the dropped file.
+    # each other, which nothing cites. No file here is a hub (every in-degree
+    # is 0 or 1), so every hub cap gives the same numbers.
     assert result["loo_cases"] == 2
-    assert result["loo_recall"] == pytest.approx(1.0)
-    assert result["loo_median_group"] == pytest.approx(1.5)
+    for cap in ip.HUB_CAPS:
+        c = result["per_cap"][cap]
+        assert c["reach"] == pytest.approx(1 / 5)
+        # only b.py's group is non-empty (size 2: page-a and page-ac both cite a.py)
+        assert c["median_nonempty"] == pytest.approx(2.0)
+        # page-ac cites two files; dropping either one still finds it through
+        # the other, via the one-hop group around the dropped file.
+        assert c["loo_recall"] == pytest.approx(1.0)
+        assert c["loo_median_group"] == pytest.approx(1.5)
 
 
 def test_cli_runs_end_to_end(repo, capsys):
@@ -148,3 +149,68 @@ def test_cli_runs_end_to_end(repo, capsys):
     out = capsys.readouterr().out
     assert "VERDICT:" in out
     assert "reach" in out.lower()
+
+
+def test_hub_cap_flips_the_verdict(tmp_path):
+    """A hub file's noise is exactly what a hub cap exists to drop: this repo
+    fails the build threshold at cap inf and cap 10, and passes at cap 5,
+    purely on the noise metric — reach and leave-one-out recall hold at every
+    cap. hub.py is imported by 7 files (target.py + h1..h6.py): a hub at cap 5
+    (7 > 5) but not at cap 10 (7 <= 10)."""
+    root = tmp_path / "hubrepo"
+    root.mkdir()
+    (root / "hub.py").write_text("", encoding="utf-8")
+    (root / "clean.py").write_text("", encoding="utf-8")
+    (root / "target.py").write_text("import hub\nimport clean\n", encoding="utf-8")
+    for i in range(1, 7):
+        (root / f"h{i}.py").write_text("import hub\n", encoding="utf-8")
+    # An independent, hub-free pair so leave-one-out has real, cap-proof cases.
+    (root / "a.py").write_text("from . import b\n", encoding="utf-8")
+    (root / "b.py").write_text("", encoding="utf-8")
+    (root / "c.py").write_text("import a\n", encoding="utf-8")
+
+    store = root / ".memory"
+    store.mkdir()
+    # Four distinct pages about hub.py: this is the noise a cap is meant to cut.
+    for i in range(1, 5):
+        memory_write.write_page(
+            store, f"page-hub{i}", f"About hub.py, angle {i}", "concept", ["hub.py"],
+            f"## Context\n\nDescribes hub.py from angle {i}." + FILLER)
+    memory_write.write_page(store, "page-clean", "About clean.py", "concept",
+                            ["clean.py"], "## Context\n\nDescribes clean.py." + FILLER)
+    # Each hub importer is directly cited by its own page, so it does not
+    # itself count as an uncited file competing for reach.
+    for i in range(1, 7):
+        memory_write.write_page(
+            store, f"page-h{i}", f"About h{i}.py", "concept", [f"h{i}.py"],
+            f"## Context\n\nDescribes h{i}.py, a hub importer." + FILLER)
+    memory_write.write_page(store, "page-a", "About a.py", "concept",
+                            ["a.py"], "## Context\n\nDescribes a.py." + FILLER)
+    memory_write.write_page(store, "page-ac", "About a.py and c.py", "concept",
+                            ["a.py", "c.py"],
+                            "## Context\n\nDescribes both a.py and c.py." + FILLER)
+
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+
+    code_files = [f for f in ip.list_repo_files(root) if f.endswith(".py")]
+    result = ip.compute(root, code_files)
+
+    # target.py and b.py are the only uncited files; a.py/c.py's leave-one-out
+    # pair is the only source of LOO cases.
+    assert result["n_uncited"] == 2
+    assert result["loo_cases"] == 2
+
+    assert result["per_cap"][None]["pass"] is False
+    assert result["per_cap"][10]["pass"] is False
+    assert result["per_cap"][5]["pass"] is True
+
+    # reach and recall hold everywhere; only noise flips.
+    for cap in ip.HUB_CAPS:
+        assert result["per_cap"][cap]["reach"] == pytest.approx(1.0)
+        assert result["per_cap"][cap]["loo_recall"] == pytest.approx(1.0)
+    assert result["per_cap"][None]["median_nonempty"] == pytest.approx(3.5)
+    assert result["per_cap"][10]["median_nonempty"] == pytest.approx(3.5)
+    assert result["per_cap"][5]["median_nonempty"] == pytest.approx(1.5)
+
+    assert "VERDICT: build (hub cap 5)" in ip.render(result, root)

@@ -13,21 +13,30 @@ Four numbers, all against `--kind decision`-worthy real pages (pages carrying a
 `superseded_by` are excluded — they are not the current answer for anything):
 
   coverage    share of code files a page already cites directly (the graph adds
-              nothing for these — the flag already works)
+              nothing for these — the flag already works); does not depend on
+              a hub cap, so it is reported once.
   reach       of the files nobody cites, the share that have a cited neighbour
-              one import hop away (undirected: imports either direction)
+              one import hop away (undirected: imports either direction), at a
+              given hub cap.
   noise       for those same uncited files, how many distinct pages would come
-              back through that hop — median and P90, at three hub caps. A hub
-              is a file imported by more than N others; a hub neighbour is
-              generic (a shared utils module, say) and dropped from the group
-              rather than counted, since being one hop from it says nothing
-              specific about the file in question. N=inf applies no filter.
+              back through that hop — median and P90, over the files actually
+              reached (a group of size 0 is not noise, it is simply unreached,
+              which the reach number already reports), at a given hub cap.
   leave-one-out
               for every page citing >=2 files, and every file X it cites: drop
               X from that page's sources and ask whether the one-hop group
               around X still finds the page through one of its *other* cited
-              files. Recall is how often it does; group size is how big the
-              returned group was.
+              files, at a given hub cap. Recall is how often it does; group
+              size is how big the returned group was.
+
+A hub cap N means: a file imported by more than N others is a hub, and a hub
+neighbour is dropped from a one-hop group rather than counted, since being one
+hop from a shared, widely-imported module (a `utils.py`, say) says nothing
+specific about the file in question. N=inf applies no filter at all. Because
+the shipped feature (if built) would use whichever cap the probe picks, not
+cap inf unconditionally, all three of the above are computed separately at
+each of three caps — inf, 10, 5 — and the verdict picks the first cap, in that
+order, whose numbers all clear their threshold.
 
 Import resolution, per language (stdlib only, no tsconfig, no cargo metadata):
 
@@ -71,14 +80,16 @@ from pagelore.lib import load_pages  # noqa: E402
 
 # --------------------------------------------------------------------------
 # Build threshold, fixed before this is ever run against a real repository.
-# All three must hold, on at least one real repo, for the feature to be worth
-# building. "median group" is metric 3 (noise), at hub cap N=inf (the
-# unrestricted hop), computed only over the uncited files whose one-hop group
-# is NON-EMPTY -- an empty group is neither noise nor signal, and including
-# the zeros would let the gate pass just because most files aren't reached at
-# all, which is already what the reach threshold checks. The hub-capped
-# variants and the leave-one-out group size are reported alongside for
-# context but do not gate the verdict.
+# All three are computed at each hub cap, and all three must hold, at the SAME
+# cap, for that cap to pass: reach >= REACH_THRESHOLD, leave-one-out recall >=
+# LOO_RECALL_THRESHOLD, and the median group size over non-empty groups <=
+# MEDIAN_GROUP_THRESHOLD (an empty group is neither noise nor signal, and
+# counting it here would let the gate pass just because most files aren't
+# reached at all -- which is already what the reach threshold checks). The
+# verdict is "build (hub cap N)" for the first cap, in the order inf, 10, 5,
+# that passes all three -- not cap inf unconditionally, because the shipped
+# feature would use whichever cap the probe recommends, not necessarily the
+# unrestricted one.
 # --------------------------------------------------------------------------
 REACH_THRESHOLD = 0.20
 LOO_RECALL_THRESHOLD = 0.5
@@ -381,6 +392,16 @@ def normalise_source(raw: str) -> str:
     return raw.strip().replace("\\", "/").lstrip("./")
 
 
+def _median(sizes: list[int]) -> float:
+    return statistics.median(sizes) if sizes else 0.0
+
+
+def _p90(sizes: list[int]) -> float:
+    if len(sizes) >= 2:
+        return statistics.quantiles(sizes, n=10)[8]
+    return float(sizes[0]) if sizes else 0.0
+
+
 def compute(repo: Path, code_files: list[str]) -> dict:
     edges_out, stats = build_graph(repo, code_files)
     reverse: dict[str, set[str]] = {f: set() for f in code_files}
@@ -403,50 +424,61 @@ def compute(repo: Path, code_files: list[str]) -> dict:
 
     cited = set(cite_map)
     uncited = [f for f in code_files if f not in cited]
-
     coverage = len(cited) / len(code_files) if code_files else 0.0
 
-    reached = 0
-    group_sizes = {cap: [] for cap in HUB_CAPS}
-    for f in uncited:
-        nb = neighbours(f, edges_out, reverse)
-        for cap in HUB_CAPS:
-            g = group_pages(capped(nb, cap, indeg), cite_map)
-            group_sizes[cap].append(len(g))
-        if group_sizes[None][-1] > 0:
-            reached += 1
-    reach = reached / len(uncited) if uncited else 0.0
+    # Each uncited file's full, uncapped neighbour set, computed once; a hub
+    # cap only filters this set, per cap, below.
+    uncited_neighbours = {f: neighbours(f, edges_out, reverse) for f in uncited}
 
-    noise = {}
+    # Every leave-one-out test case: (page slug, cited file to drop), for every
+    # page citing >=2 files and every file it cites. `neighbours(x)` never
+    # contains x itself (self-loops are dropped when edges are built), so
+    # group_pages(nb, cite_map) below never looks x back up -- no explicit
+    # trimming of P's citation out of cite_map[x] is needed.
+    loo_cases = [(p.slug, x) for p in pages for x in page_sources[p.slug]
+                 if len(page_sources[p.slug]) >= 2]
+    loo_neighbours = {x: neighbours(x, edges_out, reverse) for _, x in loo_cases}
+
+    per_cap: dict[int | None, dict] = {}
     for cap in HUB_CAPS:
-        sizes = group_sizes[cap]
-        noise[cap] = {
-            "median": statistics.median(sizes) if sizes else 0.0,
-            "p90": (statistics.quantiles(sizes, n=10)[8] if len(sizes) >= 2
-                    else (sizes[0] if sizes else 0.0)),
-        }
-    # The gate metric: noise at hub cap inf, but only over the files that were
-    # actually reached (group size > 0). Zeros belong to reach, not to noise.
-    nonempty_inf = [s for s in group_sizes[None] if s > 0]
-    median_nonempty = statistics.median(nonempty_inf) if nonempty_inf else 0.0
+        nonempty_sizes = []
+        reached = 0
+        for f in uncited:
+            g = group_pages(capped(uncited_neighbours[f], cap, indeg), cite_map)
+            if g:
+                reached += 1
+                nonempty_sizes.append(len(g))
+        reach = reached / len(uncited) if uncited else 0.0
+        median_nonempty = _median(nonempty_sizes)
+        p90_nonempty = _p90(nonempty_sizes)
 
-    loo_found = []
-    loo_group_sizes = []
-    for p in pages:
-        srcs = page_sources[p.slug]
-        if len(srcs) < 2:
-            continue
-        for x in srcs:
-            # Removing X from P's sources needs no explicit trimming of
-            # cite_map[x]: `neighbours(x)` never contains x itself (self-loops
-            # are dropped when edges are built), so group_pages(nb, cite_map)
-            # below never looks x up in the first place.
-            nb = neighbours(x, edges_out, reverse)
-            g = group_pages(nb, cite_map)
-            loo_found.append(p.slug in g)
-            loo_group_sizes.append(len(g))
-    loo_recall = statistics.fmean(loo_found) if loo_found else None
-    loo_median_group = statistics.median(loo_group_sizes) if loo_group_sizes else 0.0
+        loo_found, loo_sizes = [], []
+        for slug, x in loo_cases:
+            g = group_pages(capped(loo_neighbours[x], cap, indeg), cite_map)
+            loo_found.append(slug in g)
+            loo_sizes.append(len(g))
+        loo_recall = statistics.fmean(loo_found) if loo_found else None
+        loo_median_group = _median(loo_sizes)
+
+        fail_reasons = []
+        if reach < REACH_THRESHOLD:
+            fail_reasons.append(f"reach {reach:.1%} < {REACH_THRESHOLD:.0%}")
+        if loo_recall is None or loo_recall < LOO_RECALL_THRESHOLD:
+            got = "n/a" if loo_recall is None else f"{loo_recall:.1%}"
+            fail_reasons.append(f"leave-one-out recall {got} < {LOO_RECALL_THRESHOLD:.0%}")
+        if median_nonempty > MEDIAN_GROUP_THRESHOLD:
+            fail_reasons.append(f"median non-empty group {median_nonempty:.1f} > "
+                                f"{MEDIAN_GROUP_THRESHOLD}")
+
+        per_cap[cap] = {
+            "reach": reach,
+            "median_nonempty": median_nonempty,
+            "p90_nonempty": p90_nonempty,
+            "loo_recall": loo_recall,
+            "loo_median_group": loo_median_group,
+            "pass": not fail_reasons,
+            "fail_reasons": fail_reasons,
+        }
 
     return {
         "stats": stats,
@@ -454,12 +486,8 @@ def compute(repo: Path, code_files: list[str]) -> dict:
         "n_pages": len(pages),
         "coverage": coverage,
         "n_uncited": len(uncited),
-        "reach": reach,
-        "noise": noise,
-        "median_nonempty_group": median_nonempty,
-        "loo_cases": len(loo_found),
-        "loo_recall": loo_recall,
-        "loo_median_group": loo_median_group,
+        "loo_cases": len(loo_cases),
+        "per_cap": per_cap,
     }
 
 
@@ -480,38 +508,29 @@ def render(result: dict, repo: Path) -> str:
                  f"(superseded excluded): {result['n_pages']}")
     lines.append("")
     lines.append(f"1. coverage   {result['coverage']:.1%}  of code files cited by >=1 page")
-    lines.append(f"2. reach      {result['reach']:.1%}  of the {result['n_uncited']} uncited "
-                 f"files have a cited neighbour one import hop away")
-    lines.append("3. noise      pages in the one-hop group, over uncited files")
-    lines.append(f"   {'hub cap':>8} {'median':>8} {'p90':>8}")
+    lines.append(f"   {result['n_uncited']} uncited files and {result['loo_cases']} "
+                 f"leave-one-out cases feed the table below")
+    lines.append("")
+    lines.append("2-4. reach / leave-one-out / noise, one row per hub cap N (a hub is a "
+                 "file imported by more than N others; its edge is dropped as a neighbour)")
+    lines.append(f"   {'cap':>5} {'reach':>7} {'LOO recall':>11} {'LOO med.grp':>12} "
+                 f"{'med.nonempty':>13} {'p90 nonempty':>13}  verdict")
     for cap in HUB_CAPS:
-        n = result["noise"][cap]
-        lines.append(f"   {cap_label(cap):>8} {n['median']:>8.1f} {n['p90']:>8.1f}")
-    lines.append(f"   median over non-empty groups (hub cap inf, gates the verdict): "
-                 f"{result['median_nonempty_group']:.1f}")
-    if result["loo_recall"] is None:
-        lines.append("4. leave-one-out   no page cites >=2 files — no cases to test")
-    else:
-        lines.append(f"4. leave-one-out   recall {result['loo_recall']:.1%} over "
-                     f"{result['loo_cases']} cases, median group size "
-                     f"{result['loo_median_group']:.1f}")
+        c = result["per_cap"][cap]
+        loo_recall_s = "n/a" if c["loo_recall"] is None else f"{c['loo_recall']:.1%}"
+        lines.append(f"   {cap_label(cap):>5} {c['reach']:>7.1%} {loo_recall_s:>11} "
+                      f"{c['loo_median_group']:>12.1f} {c['median_nonempty']:>13.1f} "
+                      f"{c['p90_nonempty']:>13.1f}  {'pass' if c['pass'] else 'fail'}")
     lines.append("")
 
-    median_nonempty = result["median_nonempty_group"]
-    failures = []
-    if result["reach"] < REACH_THRESHOLD:
-        failures.append(f"reach {result['reach']:.1%} < {REACH_THRESHOLD:.0%}")
-    if result["loo_recall"] is None or result["loo_recall"] < LOO_RECALL_THRESHOLD:
-        got = "n/a" if result["loo_recall"] is None else f"{result['loo_recall']:.1%}"
-        failures.append(f"leave-one-out recall {got} < {LOO_RECALL_THRESHOLD:.0%}")
-    if median_nonempty > MEDIAN_GROUP_THRESHOLD:
-        failures.append(f"median group over non-empty groups (hub cap inf) "
-                        f"{median_nonempty:.1f} > {MEDIAN_GROUP_THRESHOLD}")
-
-    if failures:
-        lines.append("VERDICT: do not build  (" + "; ".join(failures) + ")")
+    chosen = next((cap for cap in HUB_CAPS if result["per_cap"][cap]["pass"]), None)
+    if chosen is not None:
+        lines.append(f"VERDICT: build (hub cap {cap_label(chosen)})")
     else:
-        lines.append("VERDICT: build")
+        per_cap_failures = " | ".join(
+            f"cap {cap_label(cap)}: " + "; ".join(result["per_cap"][cap]["fail_reasons"])
+            for cap in HUB_CAPS)
+        lines.append(f"VERDICT: do not build  ({per_cap_failures})")
     return "\n".join(lines)
 
 
