@@ -69,6 +69,48 @@ def test_resolves_edges_per_language(repo):
     assert stats["rust"] == {"seen": 1, "resolved": 1}
 
 
+def test_absolute_from_import_prefers_submodule_over_package():
+    """`from pkg import search` names pkg/search.py, not pkg/__init__.py — the
+    bug this regression test guards: resolving to the package unconditionally
+    dropped the real edge to the submodule."""
+    code_set = {"pkg/__init__.py", "pkg/search.py"}
+    targets, seen, resolved = ip.parse_python("app.py", "from pkg import search\n", code_set)
+    assert targets == ["pkg/search.py"]
+    assert (seen, resolved) == (1, 1)
+
+
+def test_absolute_from_import_falls_back_to_package_for_a_plain_symbol():
+    """`from pkg import CONFIG` where CONFIG is not a submodule falls back to
+    pkg's own __init__.py, since that is where a symbol import actually lives."""
+    code_set = {"pkg/__init__.py", "pkg/search.py"}
+    targets, seen, resolved = ip.parse_python("app.py", "from pkg import CONFIG\n", code_set)
+    assert targets == ["pkg/__init__.py"]
+    assert (seen, resolved) == (1, 1)
+
+
+def test_bare_relative_from_import_prefers_submodule_over_package():
+    """`from . import search` inside pkg/app.py names pkg/search.py."""
+    code_set = {"pkg/__init__.py", "pkg/search.py"}
+    targets, _, _ = ip.parse_python("pkg/app.py", "from . import search\n", code_set)
+    assert targets == ["pkg/search.py"]
+
+
+def test_dotted_relative_from_import_prefers_submodule_over_module():
+    """`from .sub import inner` inside pkg/app.py names pkg/sub/inner.py, a
+    submodule of the sub *package*, not pkg/sub.py."""
+    code_set = {"pkg/sub/__init__.py", "pkg/sub/inner.py"}
+    targets, _, _ = ip.parse_python("pkg/app.py", "from .sub import inner\n", code_set)
+    assert targets == ["pkg/sub/inner.py"]
+
+
+def test_dotted_relative_from_import_falls_back_to_module_for_a_plain_symbol():
+    """`from .sub import CONST` where sub is a plain module (pkg/sub.py, no
+    submodule named CONST) falls back to pkg/sub.py itself."""
+    code_set = {"pkg/sub.py"}
+    targets, _, _ = ip.parse_python("pkg/app.py", "from .sub import CONST\n", code_set)
+    assert targets == ["pkg/sub.py"]
+
+
 def test_metrics_on_the_synthetic_repo(repo):
     files = ip.list_repo_files(repo)
     code_files = [f for f in files
@@ -86,6 +128,8 @@ def test_metrics_on_the_synthetic_repo(repo):
     # each other, which nothing cites.
     assert result["reach"] == pytest.approx(1 / 5)
     assert result["noise"][None]["median"] == pytest.approx(0.0)
+    # only b.py's group is non-empty (size 2: page-a and page-ac both cite a.py)
+    assert result["median_nonempty_group"] == pytest.approx(2.0)
 
     # page-ac cites two files; dropping either one still finds it through the
     # other, via the one-hop group around the dropped file.

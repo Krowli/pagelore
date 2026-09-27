@@ -72,9 +72,13 @@ from pagelore.lib import load_pages  # noqa: E402
 # --------------------------------------------------------------------------
 # Build threshold, fixed before this is ever run against a real repository.
 # All three must hold, on at least one real repo, for the feature to be worth
-# building. "median group" reads as the noise metric's median at N=inf (the
-# unrestricted hop) -- the plainest form of the feature, with the hub-capped
-# variants reported alongside for context.
+# building. "median group" is metric 3 (noise), at hub cap N=inf (the
+# unrestricted hop), computed only over the uncited files whose one-hop group
+# is NON-EMPTY -- an empty group is neither noise nor signal, and including
+# the zeros would let the gate pass just because most files aren't reached at
+# all, which is already what the reach threshold checks. The hub-capped
+# variants and the leave-one-out group size are reported alongside for
+# context but do not gate the verdict.
 # --------------------------------------------------------------------------
 REACH_THRESHOLD = 0.20
 LOO_RECALL_THRESHOLD = 0.5
@@ -96,14 +100,54 @@ def list_repo_files(repo: Path) -> list[str]:
 # --------------------------------------------------------------------------
 # Python
 # --------------------------------------------------------------------------
-def _py_absolute(module: str, code_set: set[str]) -> str | None:
-    parts = module.split(".")
-    for root in ("", "src"):
-        base = "/".join(([root] if root else []) + parts)
-        for cand in (base + ".py", base + "/__init__.py"):
-            if cand in code_set:
-                return cand
+def _resolve_module_path(parts: list[str], code_set: set[str]) -> str | None:
+    """A dotted path already anchored at a real root: `x.py` or `x/__init__.py`."""
+    base = "/".join(parts)
+    for cand in (base + ".py", base + "/__init__.py"):
+        if cand in code_set:
+            return cand
     return None
+
+
+def _resolve_absolute(parts: list[str], code_set: set[str]) -> str | None:
+    """A dotted path from an absolute import, tried against the repo root and
+    against a `src/` prefix (this repo's own layout)."""
+    for root in ("", "src"):
+        found = _resolve_module_path(([root] if root else []) + parts, code_set)
+        if found:
+            return found
+    return None
+
+
+def _py_absolute(module: str, code_set: set[str]) -> str | None:
+    return _resolve_absolute(module.split("."), code_set) if module else None
+
+
+def _from_import(base_parts: list[str], names: list[str], code_set: set[str],
+                  resolve) -> list[str]:
+    """`from base import name1, name2, ...` — each name is tried FIRST as a
+    submodule of base (`base/name.py` or `base/name/__init__.py`), because that
+    is what the statement actually names: `from pagelore import search` means
+    src/pagelore/search.py, not src/pagelore/__init__.py, and resolving it to
+    the package's `__init__.py` instead silently drops the real edge to
+    search.py (and to every other name imported the same way). Only a name
+    that is not a submodule — an ordinary symbol: a class, a function, a
+    constant defined in base itself — falls back to resolving base itself,
+    and only once, however many such names there are.
+    """
+    resolved = []
+    any_symbol = False
+    for name in names:
+        sub = resolve([*base_parts, name])
+        if sub:
+            resolved.append(sub)
+        else:
+            any_symbol = True
+    if any_symbol and base_parts:
+        mod = resolve(base_parts)
+        if mod:
+            resolved.append(mod)
+    return resolved
 
 
 def _py_relative(file: str, module: str | None, level: int,
@@ -112,20 +156,9 @@ def _py_relative(file: str, module: str | None, level: int,
     up = level - 1
     if up > 0:
         dir_parts = dir_parts[:-up] if up <= len(dir_parts) else []
-    if module:
-        base = "/".join(dir_parts + module.split("."))
-        for cand in (base + ".py", base + "/__init__.py"):
-            if cand in code_set:
-                return [cand]
-        return []
-    resolved = []
-    for name in names:
-        base = "/".join([*dir_parts, name])
-        for cand in (base + ".py", base + "/__init__.py"):
-            if cand in code_set:
-                resolved.append(cand)
-                break
-    return resolved
+    base_parts = [*dir_parts, *module.split(".")] if module else dir_parts
+    return _from_import(base_parts, names, code_set,
+                        lambda parts: _resolve_module_path(parts, code_set))
 
 
 def parse_python(file: str, text: str, code_set: set[str]) -> tuple[list[str], int, int]:
@@ -152,8 +185,9 @@ def parse_python(file: str, text: str, code_set: set[str]) -> tuple[list[str], i
             if node.level:
                 found = _py_relative(file, node.module, node.level, names, code_set)
             else:
-                one = _py_absolute(node.module or "", code_set)
-                found = [one] if one else []
+                base_parts = (node.module or "").split(".") if node.module else []
+                found = _from_import(base_parts, names, code_set,
+                                     lambda parts: _resolve_absolute(parts, code_set))
             targets.extend(found)
             resolved += 1 if found else 0
     return targets, seen, resolved
@@ -391,6 +425,10 @@ def compute(repo: Path, code_files: list[str]) -> dict:
             "p90": (statistics.quantiles(sizes, n=10)[8] if len(sizes) >= 2
                     else (sizes[0] if sizes else 0.0)),
         }
+    # The gate metric: noise at hub cap inf, but only over the files that were
+    # actually reached (group size > 0). Zeros belong to reach, not to noise.
+    nonempty_inf = [s for s in group_sizes[None] if s > 0]
+    median_nonempty = statistics.median(nonempty_inf) if nonempty_inf else 0.0
 
     loo_found = []
     loo_group_sizes = []
@@ -399,16 +437,12 @@ def compute(repo: Path, code_files: list[str]) -> dict:
         if len(srcs) < 2:
             continue
         for x in srcs:
-            trimmed = list(cite_map.get(x, []))
-            if p.slug in trimmed:
-                trimmed.remove(p.slug)
-            trimmed_cite_map = dict(cite_map)
-            if trimmed:
-                trimmed_cite_map[x] = trimmed
-            else:
-                trimmed_cite_map.pop(x, None)
+            # Removing X from P's sources needs no explicit trimming of
+            # cite_map[x]: `neighbours(x)` never contains x itself (self-loops
+            # are dropped when edges are built), so group_pages(nb, cite_map)
+            # below never looks x up in the first place.
             nb = neighbours(x, edges_out, reverse)
-            g = group_pages(nb, trimmed_cite_map)
+            g = group_pages(nb, cite_map)
             loo_found.append(p.slug in g)
             loo_group_sizes.append(len(g))
     loo_recall = statistics.fmean(loo_found) if loo_found else None
@@ -422,6 +456,7 @@ def compute(repo: Path, code_files: list[str]) -> dict:
         "n_uncited": len(uncited),
         "reach": reach,
         "noise": noise,
+        "median_nonempty_group": median_nonempty,
         "loo_cases": len(loo_found),
         "loo_recall": loo_recall,
         "loo_median_group": loo_median_group,
@@ -452,6 +487,8 @@ def render(result: dict, repo: Path) -> str:
     for cap in HUB_CAPS:
         n = result["noise"][cap]
         lines.append(f"   {cap_label(cap):>8} {n['median']:>8.1f} {n['p90']:>8.1f}")
+    lines.append(f"   median over non-empty groups (hub cap inf, gates the verdict): "
+                 f"{result['median_nonempty_group']:.1f}")
     if result["loo_recall"] is None:
         lines.append("4. leave-one-out   no page cites >=2 files — no cases to test")
     else:
@@ -460,16 +497,16 @@ def render(result: dict, repo: Path) -> str:
                      f"{result['loo_median_group']:.1f}")
     lines.append("")
 
-    median_inf = result["noise"][None]["median"]
+    median_nonempty = result["median_nonempty_group"]
     failures = []
     if result["reach"] < REACH_THRESHOLD:
         failures.append(f"reach {result['reach']:.1%} < {REACH_THRESHOLD:.0%}")
     if result["loo_recall"] is None or result["loo_recall"] < LOO_RECALL_THRESHOLD:
         got = "n/a" if result["loo_recall"] is None else f"{result['loo_recall']:.1%}"
         failures.append(f"leave-one-out recall {got} < {LOO_RECALL_THRESHOLD:.0%}")
-    if median_inf > MEDIAN_GROUP_THRESHOLD:
-        failures.append(f"median group (hub cap inf) {median_inf:.1f} > "
-                        f"{MEDIAN_GROUP_THRESHOLD}")
+    if median_nonempty > MEDIAN_GROUP_THRESHOLD:
+        failures.append(f"median group over non-empty groups (hub cap inf) "
+                        f"{median_nonempty:.1f} > {MEDIAN_GROUP_THRESHOLD}")
 
     if failures:
         lines.append("VERDICT: do not build  (" + "; ".join(failures) + ")")
