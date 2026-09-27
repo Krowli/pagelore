@@ -28,7 +28,7 @@
     "url": "git+https://github.com/Krowli/pagelore.git",
     "directory": "npm"
   },
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "author": "Yehven Shcherbynskyi <lionmause999@gmail.com>",
   "bin": {
     "lore": "bin/lore.js",

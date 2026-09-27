@@ -4,7 +4,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/pagelore.svg)](https://pypi.org/project/pagelore/)
 [![npm version](https://img.shields.io/npm/v/pagelore.svg)](https://www.npmjs.com/package/pagelore)
 [![Python versions](https://img.shields.io/pypi/pyversions/pagelore.svg)](https://pypi.org/project/pagelore/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Krowli/pagelore/blob/main/LICENSE)
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-orange.svg)](https://github.com/Krowli/pagelore/blob/main/LICENSE)
 
 **Durable project memory for AI coding agents — Claude Code, Codex, Cursor, Gemini
 CLI.** Decisions, contracts and bug post-mortems live as **markdown pages in your
@@ -111,4 +111,9 @@ Claude Code: with the line the agent searched before answering 15 times out of
 
 ## License
 
-MIT — see [LICENSE](https://github.com/Krowli/pagelore/blob/main/LICENSE).
+[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) — see
+[LICENSE](https://github.com/Krowli/pagelore/blob/main/LICENSE). Free for personal, research,
+educational and other noncommercial use. Commercial use — selling it, or building it into a paid
+product or service — needs a separate license: write to lionmause999@gmail.com.
+
+Versions up to and including 0.7.0 were released under MIT and stay under MIT.

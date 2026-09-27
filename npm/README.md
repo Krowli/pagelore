@@ -51,4 +51,6 @@ the same program.
 Documentation, the evaluation numbers behind the ranking, and the reasons for each
 design decision: <https://github.com/Krowli/pagelore>
 
-MIT.
+PolyForm Noncommercial 1.0.0 — free for noncommercial use; commercial use needs a
+separate license (lionmause999@gmail.com). Versions up to and including 0.7.0 stay under MIT.
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
