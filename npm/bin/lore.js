@@ -45,14 +45,14 @@ const CANDIDATES = process.platform === "win32"
   : [["python3", []], ["python", []]];
 
 // PROJECT_MEMORY_PYTHON is the pre-0.6.0 name. It is still read, with a warning
-// on stderr, until 0.7.0 removes it.
+// on stderr, until a release removes it.
 function namedPython() {
   if (process.env.PAGELORE_PYTHON) return process.env.PAGELORE_PYTHON;
   const old = process.env.PROJECT_MEMORY_PYTHON;
   if (old && !namedPython.warned) {
     namedPython.warned = true;
     process.stderr.write("pagelore: PROJECT_MEMORY_PYTHON is deprecated, use PAGELORE_PYTHON; " +
-                         "the old name stops working in 0.7.0\n");
+                         "the old name stops working in a future release\n");
   }
   return old || "";
 }

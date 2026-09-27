@@ -1140,3 +1140,78 @@ def test_uninstall_yes_removes_the_list_of_projects(machine, tmp_path, monkeypat
 
     assert uninstall.main(["--yes"]) == 0
     assert not instructions.home().exists()
+
+
+# Releases up to 0.3.x shipped as a `project-memory` skill copied into place, with
+# hooks written into `.claude/settings.json`. Copied scripts keep working after the
+# program is uninstalled, and their session-start hook keeps announcing a memory,
+# so an upgrade that leaves them behind runs two memories side by side. This was
+# found for real in a repository months after the move to an installed command.
+
+def _legacy_copy(base: Path) -> Path:
+    skill = base / ".agents" / "skills" / "project-memory"
+    (skill / "scripts").mkdir(parents=True)
+    (skill / "scripts" / "memory_search.py").write_text("print('old')\n", encoding="utf-8")
+    link = base / ".claude" / "skills" / "project-memory"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        link.symlink_to(skill, target_is_directory=True)
+    except OSError:
+        pass  # Windows without the privilege; the copy alone still counts
+    return skill
+
+
+def _legacy_hooks(settings: Path) -> None:
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text(json.dumps({"hooks": {
+        "SessionStart": [{"matcher": "startup", "hooks": [
+            {"type": "command", "command": "python3 old.py",
+             "_managed_id": "project-memory-session-start"}]}],
+        "PreToolUse": [{"matcher": "Edit", "hooks": [
+            {"type": "command", "command": "mine.sh"}]}],
+    }, "theme": "dark"}), encoding="utf-8")
+
+
+def test_uninstall_removes_a_legacy_copy_and_its_hooks_everywhere(machine):
+    home, project = machine
+    global_skill = _legacy_copy(home)
+    project_skill = _legacy_copy(project)
+    _legacy_hooks(home / ".claude" / "settings.json")
+    _legacy_hooks(project / ".claude" / "settings.json")
+
+    assert uninstall.main([]) == 0
+
+    assert not global_skill.exists() and not project_skill.exists()
+    assert not (home / ".claude" / "skills" / "project-memory").exists()
+    assert not (project / ".claude" / "skills" / "project-memory").is_symlink()
+    for settings in (home / ".claude" / "settings.json", project / ".claude" / "settings.json"):
+        doc = json.loads(settings.read_text(encoding="utf-8"))
+        assert "SessionStart" not in doc["hooks"]
+        assert doc["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "mine.sh"
+        assert doc["theme"] == "dark"
+
+
+def test_uninstall_leaves_a_project_memory_directory_that_is_not_ours(machine):
+    home, _ = machine
+    other = home / ".agents" / "skills" / "project-memory"
+    other.mkdir(parents=True)
+    (other / "SKILL.md").write_text("someone else's skill\n", encoding="utf-8")
+
+    assert uninstall.main([]) == 0
+    assert (other / "SKILL.md").is_file()
+
+
+def test_doctor_reports_a_legacy_copy_in_the_project(machine):
+    _, project = machine
+    _legacy_copy(project)
+    rows = [row for row in doctor.findings() if row["check"] == "legacy"]
+    assert rows and rows[0]["ok"] is False
+    assert "lore uninstall" in rows[0]["detail"]
+
+
+def test_init_warns_about_a_legacy_copy(machine):
+    home, _ = machine
+    _legacy_copy(home)
+    _, out = run("", ["--agent", "claude", "--scope", "global", "--via", "file", "--yes"],
+                 interactive=False)
+    assert "older pagelore" in out and "lore uninstall" in out

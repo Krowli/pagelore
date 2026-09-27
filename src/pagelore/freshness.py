@@ -179,11 +179,10 @@ def drift(pages: list[Page], store: Path) -> dict[str, dict[str, list[str]]]:
     citation cannot be resolved without a reliable root.
 
     `changed`: the source's last commit is strictly newer than the *page file's*
-    last commit. A page with no commit at all (freshly written, never committed)
-    has nothing to compare against, so `changed` is skipped for it — not
-    reported as stale, not reported as fresh, simply not decidable yet. A source
-    with no commit of its own (created but never committed) is likewise left out
-    of `changed`, for the same reason. Uncommitted edits to an already-committed
+    last commit — or, for a page never committed (the default gitignored store, a
+    home store, a page not committed yet), than the page file's mtime. A source
+    with no commit of its own (created but never committed) is left out of
+    `changed`: it has no commit time to compare. Uncommitted edits to an already-committed
     source do not move its commit time at all, so they are silently ignored,
     which is the intended behaviour: a page should not flap between marked and
     unmarked while someone is mid-edit.
@@ -192,12 +191,14 @@ def drift(pages: list[Page], store: Path) -> dict[str, dict[str, list[str]]]:
     paths: set[str] = set()
     page_rel: dict[str, str] = {}
     for page in pages:
+        # A page outside the root (a home store reached through a symlink) has no
+        # commit to look up, but its sources still do.
         try:
             rel = page.path.resolve().relative_to(root.resolve()).as_posix()
+            page_rel[page.slug] = rel
+            paths.add(rel)
         except (ValueError, OSError):
-            continue
-        page_rel[page.slug] = rel
-        paths.add(rel)
+            pass
         for s in (page.meta.get("sources") or []):
             s = str(s)
             if _inside_root(s):
@@ -210,6 +211,14 @@ def drift(pages: list[Page], store: Path) -> dict[str, dict[str, list[str]]]:
     out: dict[str, dict[str, list[str]]] = {}
     for page in pages:
         page_ts = commits.get(page_rel.get(page.slug, ""))
+        if page_ts is None:
+            # Never committed — the default gitignored store, a home store, a page
+            # not committed yet. A clone never creates such a file, so its mtime is
+            # the time it was last written, not a checkout time.
+            try:
+                page_ts = int(page.path.stat().st_mtime)
+            except OSError:
+                page_ts = None
         changed: list[str] = []
         gone: list[str] = []
         for source in page.meta.get("sources") or []:

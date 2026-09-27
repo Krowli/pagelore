@@ -160,6 +160,87 @@ def _project_root() -> Path | None:
     return Path(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
 
 
+# Releases up to 0.3.x shipped as a `project-memory` skill copied into place —
+# `~/.agents/skills/` or a project's `.agents/skills/`, linked from `.claude/skills/`
+# — with hooks written into `.claude/settings.json` under a `_managed_id`. Copied
+# scripts keep working after the program is uninstalled, and the session-start hook
+# keeps announcing a memory, so an upgrade that leaves them runs two memories.
+LEGACY_SKILL = "project-memory"
+LEGACY_HOOK_PREFIX = "project-memory"
+
+
+def _legacy_hook(hook) -> bool:
+    return isinstance(hook, dict) and str(hook.get("_managed_id", "")).startswith(
+        LEGACY_HOOK_PREFIX)
+
+
+def legacy_installs(roots: list[Path]) -> list[tuple[str, Path]]:
+    """What an old copied install left under the home directory and each root:
+    ("copy", skill dir or link) and ("hooks", settings.json holding its hooks).
+    A `project-memory` directory counts only if it carries the old scripts, so
+    someone else's skill of that name is never touched."""
+    found: list[tuple[str, Path]] = []
+    for base in dict.fromkeys([Path.home(), *roots]):
+        for parent in (base / ".agents" / "skills", base / ".claude" / "skills"):
+            path = parent / LEGACY_SKILL
+            if (path / "scripts" / "memory_search.py").is_file() or (
+                    path.is_symlink() and not path.exists()):
+                found.append(("copy", path))
+        settings = base / ".claude" / "settings.json"
+        doc = _read_json(settings) if settings.is_file() else None
+        if isinstance(doc, dict) and any(
+                _legacy_hook(hook)
+                for groups in (doc.get("hooks") or {}).values() if isinstance(groups, list)
+                for group in groups if isinstance(group, dict)
+                for hook in group.get("hooks") or []):
+            found.append(("hooks", settings))
+    return found
+
+
+def remove_legacy(roots: list[Path], out) -> bool:
+    """Take out everything `legacy_installs` finds. Returns True when anything went."""
+    did = False
+    # Links first: removing the copy they point at would leave them dangling, and a
+    # dangling link no longer answers `is_file()` for the scripts check.
+    items = sorted(legacy_installs(roots), key=lambda item: not item[1].is_symlink())
+    for kind, path in items:
+        try:
+            if kind == "hooks":
+                doc = _read_json(path)
+                hooks = doc.get("hooks") or {}
+                for event in list(hooks):
+                    groups = []
+                    for group in hooks[event]:
+                        if isinstance(group, dict):
+                            group["hooks"] = [h for h in group.get("hooks") or []
+                                              if not _legacy_hook(h)]
+                            if not group["hooks"]:
+                                continue
+                        groups.append(group)
+                    if groups:
+                        hooks[event] = groups
+                    else:
+                        del hooks[event]
+                if not hooks:
+                    doc.pop("hooks", None)
+                path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n",
+                                encoding="utf-8")
+                print(f"removed:   the old project-memory hooks from {path}", file=out)
+            elif path.is_symlink():
+                path.unlink()
+                print(f"removed:   {path}  (a link to the old project-memory copy)", file=out)
+            elif path.is_dir():
+                shutil.rmtree(path)
+                print(f"removed:   {path}  (an old copied install of project-memory)",
+                      file=out)
+            else:
+                continue
+            did = True
+        except OSError as exc:
+            print(f"skipped:   {path} ({exc})", file=sys.stderr)
+    return did
+
+
 def remembered_projects() -> list[Path]:
     """The projects `lore init --scope project` connected, oldest first."""
     try:
@@ -738,6 +819,13 @@ def main(argv: list[str] | None = None, *, prog: str = "lore init",
     if not interactive and not flags_given:
         print("\nNo terminal to confirm on, so nothing else was changed.", file=out)
 
+    legacy = legacy_installs([r for r in (root, *remembered_projects()) if r])
+    if legacy:
+        print("\nAn older pagelore (project-memory) is still wired in and would run beside "
+              "this one:", file=out)
+        for _, path in legacy:
+            print(f"  {short(path)}", file=out)
+        print(f"FIX: {cmd} uninstall removes it (run {cmd} init again afterwards)", file=out)
     print(f"\nTo take it all back out:  {cmd} uninstall", file=out)
     if args.json:
         result.update({"scope": "project" if scope_root else "global",

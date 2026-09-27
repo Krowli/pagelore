@@ -147,6 +147,7 @@ def main(argv: list[str] | None = None, *, prog: str = "lore uninstall") -> int:
             print(f"skipped:   {target} ({exc})", file=sys.stderr)
 
     removed = _remove_mcp(roots, sys.stdout) or removed
+    removed = init.remove_legacy(roots, sys.stdout) or removed
 
     home = instructions.home()
     if args.yes and home.is_dir():
