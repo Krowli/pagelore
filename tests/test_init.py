@@ -1119,9 +1119,10 @@ def test_uninstall_skips_a_remembered_project_that_is_gone(machine, tmp_path, mo
     _, project = machine
     other = _second_project(tmp_path)
     _connect_project(other, monkeypatch)
+    # Leave it first: Windows refuses to delete the working directory.
+    monkeypatch.chdir(project)
     shutil.rmtree(other)
 
-    monkeypatch.chdir(project)
     assert uninstall.main([]) == 0
     assert "no longer exists" in capsys.readouterr().out
 
