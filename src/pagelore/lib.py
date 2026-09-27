@@ -259,6 +259,57 @@ def load_pages(store: Path) -> list[Page]:
     return out
 
 
+# A fence is three OR MORE backticks or tildes. Matching exactly three was a real
+# bug: quoting a memory page requires a ````-fence around a page that itself
+# contains ```, and the first inner ``` then closed the outer fence, exposing a
+# quoted `## ` line as a heading. CommonMark's rule is used for the close — same
+# character, and at least as long as the opening run. Shared by write.py's
+# split_sections and links() below: both walk a body line by line deciding
+# what is inside a code fence, and a second copy of this regex drifting out of
+# sync with the first would make the two disagree about it.
+_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+
+# [[target]] or [[target|anchor text]]. The target excludes "]" and "|" so a
+# malformed or nested bracket does not eat the rest of the line.
+_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]")
+
+# An inline code span: a run of one or more backticks, closed by a run of the
+# same length. `(?<!`)` before the closing run and `(?!`)` after it reject a
+# would-be close that is really part of a longer run — the standard trick for
+# telling `` `a` `` (span closes after "a") from ``` ``a` ``` (the lone
+# backtick inside is content, not a close, because it is not length 2).
+_INLINE_CODE_RE = re.compile(r"(`+).*?(?<!`)\1(?!`)")
+
+
+def links(body: str) -> list[str]:
+    """Targets of `[[slug]]` / `[[slug|anchor text]]` links, in appearance order.
+
+    Duplicates are kept — callers dedupe if they need to, since write.main's
+    warning wants first-appearance order over distinct targets while show.py's
+    backlink check only wants membership. A link inside a fenced code block or
+    an inline code span is not a cross-reference, it is the literal text
+    `[[...]]` being discussed, so both are excluded before matching: fences with
+    the same open/close rule as split_sections, code spans by stripping them
+    out of each line first.
+    """
+    out: list[str] = []
+    fence: str | None = None
+    for line in body.splitlines():
+        match = _FENCE.match(line)
+        if match:
+            token = match.group(1)
+            if fence is None:
+                fence = token
+            elif token[0] == fence[0] and len(token) >= len(fence):
+                fence = None
+            continue
+        if fence is not None:
+            continue
+        stripped = _INLINE_CODE_RE.sub("", line)
+        out.extend(m.group(1).strip() for m in _LINK_RE.finditer(stripped))
+    return out
+
+
 def find_page(store: Path, slug: str) -> Page | None:
     """The page a search result named, or None.
 

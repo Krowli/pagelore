@@ -8,6 +8,15 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`[[slug]]` links are now parsed, checked and surfaced.** `lore write` warns,
+  code `dangling_link`, when a `[[slug]]` in the resulting page names no page in
+  the store — `⚠ [[x]] names no page in this store — write it, or fix the slug`,
+  one line per distinct target, exit code still 0 (it is a warning, not a
+  refusal: an agent legitimately writes page A linking to page B before B
+  exists). `lore show <slug>` prints `linked from: a, b` on stderr — the other
+  pages, sorted, whose `[[slug]]` names the page being shown; stdout is
+  unchanged, still byte-identical to the file. A link inside a fenced code
+  block or an inline code span is read as literal text, not a cross-reference.
 - **`lore write` refuses a title or body that looks like a committed credential**
   (AWS access key, classic or fine-grained GitHub token, Anthropic or OpenAI API
   key, Slack token, PEM private key header), code `secret_in_body`. The refusal

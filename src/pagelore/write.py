@@ -30,12 +30,14 @@ from pathlib import Path
 
 from .cli import add_version
 from .lib import (
+    _FENCE,
     MIN_BODY,
     StoreUnavailable,
     atomic_write,
     ensure_store,
     find_store,
     is_page,
+    links,
     log_event,
     page_lock,
     parse_page,
@@ -181,13 +183,6 @@ KINDS = ("decision", "bug", "concept", "howto")
 # possible fix for superseded pages.
 MANAGED_SCALARS = ("slug", "title", "kind", "created", "updated", "status", "superseded_by")
 MANAGED_LISTS = ("supersedes", "sources")
-
-# A fence is three OR MORE backticks or tildes. Matching exactly three was a real
-# bug: quoting a memory page requires a ````-fence around a page that itself
-# contains ```, and the first inner ``` then closed the outer fence, exposing a
-# quoted `## ` line as a heading. CommonMark's rule is used for the close — same
-# character, and at least as long as the opening run.
-_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 
 
 def split_sections(body: str) -> list[tuple[str | None, str]]:
@@ -619,6 +614,32 @@ def main(argv: list[str] | None = None, *, prog: str = "lore write") -> int:
     warn_locations = locate_high_entropy(args.title, body)
     warnings = ["high_entropy"] if warn_locations else []
 
+    # Dangling links are checked against the RESULTING body — the page as it
+    # will read after this write, not just the text this call typed — because
+    # a merge can introduce or drop a `[[slug]]` that was in an earlier
+    # section. A self-link is never dangling: the page being created here
+    # cannot yet exist on disk to be found by the `store / f"{t}.md"` check
+    # below, but it is not a broken reference. Not a refusal: an agent
+    # legitimately writes page A linking to page B before B exists.
+    # A target that is not itself a valid slug can never name a page in this
+    # store, so it is reported dangling without ever touching the filesystem
+    # — `[[../outside]]` or `[[/etc/hosts]]` must not be resolved as a path
+    # relative to the store, the way `[[the-decision]].md` is. A target that
+    # does look like a slug is "present" only through the same is_page()
+    # guard --supersedes uses below: a symlink out of the store must not
+    # count as the page it points at existing.
+    root = store.resolve()
+    dangling: list[str] = []
+    seen_targets: set[str] = set()
+    for target in links(result.body):
+        if target == args.slug or target in seen_targets:
+            continue
+        seen_targets.add(target)
+        if not SLUG_RE.match(target) or not is_page(store / f"{target}.md", root):
+            dangling.append(target)
+    if dangling:
+        warnings.append("dangling_link")
+
     try:
         path = write_page(store, args.slug, args.title, args.kind,
                           args.source, body, args.supersedes)
@@ -658,6 +679,9 @@ def main(argv: list[str] | None = None, *, prog: str = "lore write") -> int:
     for loc in warn_locations:
         print(f"⚠ {loc} looks like a credential (high-entropy string) — "
               "if it is one, remove it and rewrite the page", file=sys.stderr)
+    for target in dangling:
+        print(f"⚠ [[{target}]] names no page in this store — write it, or fix the slug",
+              file=sys.stderr)
     print(path)
     return 0
 

@@ -54,7 +54,9 @@ lore show [--store STORE] slug
 ```
 
 Prints one page, by the slug a search printed. If the page was superseded, stderr
-says which page to read instead.
+says which page to read instead. stdout is always exactly the file on disk; stderr
+also prints `linked from: a, b` — the other pages in the store whose `[[slug]]`
+names this one, sorted, when there are any.
 
 ### `lore list`
 
@@ -156,6 +158,17 @@ successful write, exit code still 0:
 ```
 ⚠ body line 12 looks like a credential (high-entropy string) — if it is one, remove it and rewrite the page
 ```
+
+A `[[slug]]` link whose target has no page in the store is the same kind of
+non-fatal problem — the write still succeeds, exit code 0, with one line per
+distinct dangling target on stderr:
+
+```
+⚠ [[some-other-page]] names no page in this store — write it, or fix the slug
+```
+
+This is a warning rather than a refusal because an agent legitimately writes
+page A linking to page B before B exists.
 
 Page format: [page format](page-format.md).
 
