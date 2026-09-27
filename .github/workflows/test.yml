@@ -195,8 +195,17 @@ jobs:
           fi
 
   npm-pack:
-    name: the npm tarball carries the same program
-    runs-on: ubuntu-latest
+    name: the npm tarball carries the same program (${{ matrix.os }})
+    # Every OS, not only Linux: finding an interpreter is platform-specific (Windows
+    # has `py -3` and no `python3`), and that search is the shim's whole job.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
@@ -223,7 +232,8 @@ jobs:
 
           def digest(data): return hashlib.sha256(data).hexdigest()
 
-          tree = {str(p.relative_to("src")): digest(p.read_bytes())
+          # as_posix: tar member names always use "/", Windows paths do not.
+          tree = {p.relative_to("src").as_posix(): digest(p.read_bytes())
                   for p in sorted(Path("src/pagelore").rglob("*"))
                   if p.is_file() and "__pycache__" not in p.parts}
 
@@ -271,7 +281,10 @@ jobs:
           fi
           grep -q "so nothing else was tried" err.txt || { cat err.txt; exit 1; }
 
+      # A shell script cannot be spawned as an executable on Windows, so this stand-in
+      # for an old interpreter only exists on the POSIX runners.
       - name: An interpreter below the floor is skipped, not reported as broken
+        if: runner.os != 'Windows'
         run: |
           set -euo pipefail
           printf '#!/bin/sh\nexit 69\n' > /tmp/too-old && chmod +x /tmp/too-old
@@ -279,3 +292,22 @@ jobs:
             echo "::error::exit 69 was treated as success"; exit 1
           fi
           grep -q "older than Python" err.txt || { cat err.txt; exit 1; }
+
+      # `npm install -g` succeeds on a machine with no Python at all — there is
+      # deliberately no postinstall — so the first `lore` is where the user learns
+      # it is missing. That run must name what is missing and how to fix it. PATH
+      # points at an empty directory so no interpreter can be found; node and the
+      # shim are called by absolute path.
+      - name: With no Python on PATH, lore says what is missing and how to fix it
+        run: |
+          set -euo pipefail
+          node_bin=$(command -v node)
+          shim="$(npm root -g)/pagelore/bin/lore.js"
+          empty=$(mktemp -d)
+          if env -u PAGELORE_PYTHON -u PROJECT_MEMORY_PYTHON PATH="$empty" \
+               "$node_bin" "$shim" --version 2>err.txt; then
+            echo "::error::lore ran with no Python on PATH"; cat err.txt; exit 1
+          fi
+          cat err.txt
+          grep -q "could not find it" err.txt || exit 1
+          grep -q "FIX: install Python" err.txt || exit 1
