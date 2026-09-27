@@ -310,6 +310,17 @@ def links(body: str) -> list[str]:
     return out
 
 
+def resolve_source(src: str, store: Path) -> Path | None:
+    """Sources are cited relative to the project root, but the command may run
+    from anywhere. Try the store's parent (the project root, since the store is
+    <root>/.memory) and then the working directory."""
+    for base in (store.parent, Path.cwd()):
+        candidate = base / src
+        if candidate.exists():
+            return candidate
+    return Path(src) if Path(src).exists() else None
+
+
 def find_page(store: Path, slug: str) -> Page | None:
     """The page a search result named, or None.
 

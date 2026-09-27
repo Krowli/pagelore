@@ -8,6 +8,19 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`lore search` and `lore show` mark a page whose `sources` moved on after the
+  page did, from git history.** A hit is marked `⚠ source changed: a.py, b.py`
+  when a source's last commit is newer than the page file's own, and
+  `⚠ source gone: c.py` when a source no longer resolves at all — a page and a
+  source landing in the *same* commit are not marked, since that is one clock
+  reading, not two. `--json` hits gain `stale_sources` and `gone_sources`,
+  always present, possibly empty. Neither marker changes ranking. Nothing is
+  marked outside a git work tree (no repository, no `git` binary, a timed-out
+  call) — without git there is no reliable project root to resolve a `gone`
+  source against, so the feature stays silent rather than guess. The check runs
+  once per search, after ranking is done, not inside `search()` itself, so
+  `evals/run.py` (hundreds of `search()` calls per run) pays nothing for it.
+
 - **`[[slug]]` links are now parsed, checked and surfaced.** `lore write` warns,
   code `dangling_link`, when a `[[slug]]` in the resulting page names no page in
   the store — `⚠ [[x]] names no page in this store — write it, or fix the slug`,

@@ -42,6 +42,7 @@ from .lib import (
     page_lock,
     parse_page,
     read_text,
+    resolve_source,
     store_problem,
 )
 
@@ -414,17 +415,6 @@ def reject(store: Path, code: str, reason: str, repair: str, slug: str = "") -> 
     print(f"FIX: {repair}", file=sys.stderr)
     log_event(store, "reject", create=True, code=code, slug=slug, reason=reason)
     return 1
-
-
-def resolve_source(src: str, store: Path) -> Path | None:
-    """Sources are cited relative to the project root, but the command may run
-    from anywhere. Try the store's parent (the project root, since the store is
-    <root>/.memory) and then the working directory."""
-    for base in (store.parent, Path.cwd()):
-        candidate = base / src
-        if candidate.exists():
-            return candidate
-    return Path(src) if Path(src).exists() else None
 
 
 def _supersedes_chain(store: Path, start: str, target: str, depth: int = 20) -> bool:

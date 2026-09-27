@@ -267,6 +267,15 @@ instead: the list is not evidence that an answer exists, and each hit has to be
 judged on what it says. Any system that returns a ranked list has this problem;
 what is unusual here is only that it is measured.
 
+A related but separate problem: a hit can be confident *and correct about the
+past* — the page really did describe the code, once. `⚠ source changed` /
+`⚠ source gone` (`freshness.py`, from git history) flags a page whose `sources`
+moved on after the page did, or vanished outright. This is a marker, not a
+ranking signal: a stale page is not demoted or dropped, because a rejected
+alternative or a bug's cause is often still the useful part even after the code
+around it changed shape. Judging a marked hit is still the agent's job, the same
+as judging an unmarked one on the unanswerable set above.
+
 ## Parameters
 
 `k1=1.2`, `b=0.75` — textbook. A cross-validated sweep found a different optimum

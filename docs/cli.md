@@ -47,6 +47,15 @@ Recency only breaks ties. A page under the 200-character floor is skipped and
 named on stderr and in `--json`, so it can be rewritten; a page with no sources is
 shown, marked `⚠ no sources`. Ranking: [retrieval](retrieval.md).
 
+A hit whose `sources` have moved on since the page was written is marked, from
+git history: `⚠ source changed: a.py, b.py` when a source's last commit is newer
+than the page's own, `⚠ source gone: c.py` when a source no longer exists.
+`--json` carries the same two lists as `stale_sources` and `gone_sources` on
+every hit, always present, possibly empty. Neither marker changes ranking or
+appears at all outside a git work tree — no repository, no `git` binary, a
+timed-out call — because `gone` cannot be decided reliably without the project
+root, and that root is only known here because git named it.
+
 ### `lore show <slug>`
 
 ```
@@ -56,7 +65,9 @@ lore show [--store STORE] slug
 Prints one page, by the slug a search printed. If the page was superseded, stderr
 says which page to read instead. stdout is always exactly the file on disk; stderr
 also prints `linked from: a, b` — the other pages in the store whose `[[slug]]`
-names this one, sorted, when there are any.
+names this one, sorted, when there are any — and, same as search,
+`⚠ source changed: a.py` / `⚠ source gone: b.py` when git history says a source
+moved on after the page (nothing outside a git work tree).
 
 ### `lore list`
 

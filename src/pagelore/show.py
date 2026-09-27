@@ -12,6 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from . import freshness
 from .cli import add_version
 from .lib import find_page, find_store, links, load_pages, read_text, refuse_missing
 
@@ -42,6 +43,12 @@ def main(argv: list[str] | None = None, *, prog: str = "lore show") -> int:
                         if p.slug != page.slug and page.slug in links(p.body)})
     if backlinks:
         print(f"linked from: {', '.join(backlinks)}", file=sys.stderr)
+    drifted = freshness.drift([page], store).get(page.slug)
+    if drifted:
+        if drifted.get("changed"):
+            print(f"⚠ source changed: {', '.join(drifted['changed'])}", file=sys.stderr)
+        if drifted.get("gone"):
+            print(f"⚠ source gone: {', '.join(drifted['gone'])}", file=sys.stderr)
     sys.stdout.write(read_text(page.path))
     return 0
 
