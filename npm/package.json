@@ -1,6 +1,6 @@
 {
   "name": "pagelore",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Durable project memory as markdown pages on disk, searchable without a server",
   "keywords": [
     "memory",
