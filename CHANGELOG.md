@@ -34,6 +34,17 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     search; `~/.cache/project-memory/` can be deleted.
   - The repository is now `github.com/Krowli/pagelore`; the old URL redirects.
 
+### Fixed
+
+- **`lore uninstall --yes` deleted `--store home` pages.** It removed the whole
+  `~/.pagelore/` directory, and a `lore init --store home` project keeps its pages
+  there (`~/.pagelore/<project>/`, reached through the project's `.memory` link) —
+  while its help said "not your pages". It now removes only pagelore's own files
+  there (the block `AGENT.md`, its `.version` stamp, and scratch files a crashed
+  write left), keeps and lists every store and anything else it did not write, and
+  removes the directory only once it is empty. The `~/.project-memory` link is
+  removed only when it points at that directory and the directory is gone.
+
 ## [0.5.1] - 2026-09-26
 
 ### Added

@@ -109,9 +109,14 @@ that cannot load an `@path` does not error, it just stops searching.
   `project-memory`) when that program is on PATH, and prints the command when it
   is not.
 
-`lore uninstall --yes` also removes `~/.pagelore/` (the block, not your
-pages). **Your pages are never touched**; delete a `.memory/` directory yourself if
-you mean to.
+`lore uninstall --yes` also removes pagelore's own files in `~/.pagelore/` — the
+block `AGENT.md` and its `.version` stamp — and then the directory itself if that
+leaves it empty. A `lore init --store home` project keeps its pages in that same
+directory (`~/.pagelore/<project>/`), so any such store, and anything else in there
+pagelore did not write, is kept and listed; the directory stays. The link a 0.6.0
+upgrade left at `~/.project-memory` is removed only when it points at
+`~/.pagelore` and that directory is gone. **Your pages are never touched**; delete
+a `.memory/` directory, or what is left of `~/.pagelore/`, yourself if you mean to.
 
 ## Upgrading to 0.6.0: one name
 

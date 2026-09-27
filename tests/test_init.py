@@ -247,6 +247,86 @@ def test_uninstall_takes_out_the_block_and_leaves_the_pages(machine, capsys):
     assert ".memory/" in capsys.readouterr().out
 
 
+def test_uninstall_yes_keeps_a_home_store_and_removes_only_program_files(machine, capsys):
+    """`--store home` puts a project's pages inside the same directory as the block.
+    `--yes` used to `rmtree` that directory, pages and all, while its help said
+    "not your pages"."""
+    _, project = machine
+    code, _ = run("", argv=["--store", "home", "--yes"], interactive=False)
+    assert code == 0
+    store = instructions.home() / project.name
+    page = store / "a-page.md"
+    page.write_text("---\nslug: a-page\n---\n\nkeep me\n", encoding="utf-8")
+    assert instructions.block_path().is_file()
+    assert (instructions.home() / instructions.STAMP).is_file()
+    capsys.readouterr()
+
+    assert uninstall.main(["--yes"]) == 0
+    out = capsys.readouterr().out
+    assert page.read_text(encoding="utf-8") == "---\nslug: a-page\n---\n\nkeep me\n"
+    assert (project / ".memory" / "a-page.md").is_file(), "the project's link went dark"
+    assert not instructions.block_path().exists()
+    assert not (instructions.home() / instructions.STAMP).exists()
+    assert instructions.home().is_dir()
+    assert f"kept:      {store}" in out
+    assert f"removed:   {instructions.home()}\n" not in out
+
+
+def test_uninstall_yes_removes_the_home_once_it_is_empty(machine, capsys):
+    run("2\n1\n\ny\n2\n")
+    assert instructions.block_path().is_file()
+
+    assert uninstall.main(["--yes"]) == 0
+    assert not instructions.home().exists()
+    assert f"removed:   {instructions.home()}" in capsys.readouterr().out
+
+
+def test_uninstall_yes_keeps_a_file_it_does_not_know(machine, capsys):
+    run("2\n1\n\ny\n2\n")
+    notes = instructions.home() / "my-notes.txt"
+    notes.write_text("mine\n", encoding="utf-8")
+
+    assert uninstall.main(["--yes"]) == 0
+    assert notes.read_text(encoding="utf-8") == "mine\n"
+    assert not instructions.block_path().exists()
+    assert f"kept:      {notes}" in capsys.readouterr().out
+
+
+def test_uninstall_yes_removes_the_legacy_link_only_when_it_points_at_the_home(machine):
+    run("2\n1\n\ny\n2\n")
+    legacy = instructions.legacy_home()
+    legacy.symlink_to(instructions.home(), target_is_directory=True)
+
+    assert uninstall.main(["--yes"]) == 0
+    assert not legacy.is_symlink() and not legacy.exists()
+
+
+def test_uninstall_yes_leaves_a_legacy_link_pointing_elsewhere(machine):
+    home, _ = machine
+    run("2\n1\n\ny\n2\n")
+    elsewhere = home / "elsewhere"
+    elsewhere.mkdir()
+    legacy = instructions.legacy_home()
+    legacy.symlink_to(elsewhere, target_is_directory=True)
+
+    assert uninstall.main(["--yes"]) == 0
+    assert legacy.is_symlink()
+
+
+def test_uninstall_yes_keeps_the_legacy_link_while_a_store_is_kept(machine):
+    """A pre-0.6.0 `--store home` project links through `~/.project-memory/<name>`;
+    while its pages are kept, so is the link that reaches them."""
+    _, project = machine
+    run("", argv=["--store", "home", "--yes"], interactive=False)
+    (instructions.home() / project.name / "a-page.md").write_text(
+        "---\nslug: a-page\n---\n\nkeep me\n", encoding="utf-8")
+    legacy = instructions.legacy_home()
+    legacy.symlink_to(instructions.home(), target_is_directory=True)
+
+    assert uninstall.main(["--yes"]) == 0
+    assert legacy.is_symlink() and (legacy / project.name / "a-page.md").is_file()
+
+
 def test_uninstall_removes_our_mcp_entry_and_keeps_the_neighbours(machine, capsys):
     _, project = machine
     target = project / ".mcp.json"

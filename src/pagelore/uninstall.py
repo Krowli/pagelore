@@ -20,13 +20,14 @@ Cursor's mcp.json are never deleted, because Gemini and Cursor write them too �
 from __future__ import annotations
 
 import argparse
-import shutil
+import re
 import sys
 from pathlib import Path
 
 from . import init, instructions
 from .cli import add_version
 from .init import MCP_LEGACY, MCP_SERVER, PROJECT_FILES, agent_files, codex_home
+from .lib import LOG_NAME, page_paths
 
 
 def _remove_mcp(root: Path | None, out) -> bool:
@@ -68,11 +69,51 @@ def _remove_mcp(root: Path | None, out) -> bool:
     return did
 
 
+# What this program writes into its home directory, and nothing else: the block, the
+# version stamp, and the scratch copies `atomic_write` leaves if it dies mid-write.
+# Everything else in there — above all a `lore init --store home` project store, which
+# lives at `<home>/<project>/` — is someone's, and `uninstall` never deletes it.
+_PROGRAM_FILES = (instructions.BLOCK, instructions.STAMP)
+_SCRATCH = re.compile(r"^\.(%s)\.\d+\.\d+\.tmp$"
+                      % "|".join(re.escape(name) for name in _PROGRAM_FILES))
+
+
+def _is_store(path: Path) -> bool:
+    """A directory holding pages, or the log that only a store carries."""
+    return path.is_dir() and (bool(page_paths(path)) or (path / LOG_NAME).is_file())
+
+
+def _clean_home(home: Path, out) -> bool:
+    """Remove the program's own files from `home`, and `home` itself if that empties
+    it. Returns True when the directory is gone."""
+    for entry in sorted(home.iterdir()):
+        if entry.is_file() and not entry.is_symlink() and (
+                entry.name in _PROGRAM_FILES or _SCRATCH.match(entry.name)):
+            entry.unlink()
+            print(f"removed:   {entry}", file=out)
+    kept = sorted(home.iterdir())
+    if not kept and not home.is_symlink():
+        home.rmdir()
+        print(f"removed:   {home}", file=out)
+        return True
+    stores = [entry for entry in kept if _is_store(entry)]
+    for entry in stores:
+        print(f"kept:      {entry}  (a --store home project store: your pages)", file=out)
+    for entry in kept:
+        if entry not in stores:
+            print(f"kept:      {entry}  (not one of pagelore's own files)", file=out)
+    print(f"kept:      {home}  (not empty; to delete what is left, pages included:"
+          f" rm -r {home})", file=out)
+    return False
+
+
 def main(argv: list[str] | None = None, *, prog: str = "lore uninstall") -> int:
     ap = argparse.ArgumentParser(prog=prog, description="Disconnect the memory from your agents.")
     add_version(ap)
     ap.add_argument("--yes", action="store_true",
-                    help="also remove ~/.pagelore/ (the block, not your pages)")
+                    help="also remove pagelore's own files in ~/.pagelore/ (the block and "
+                         "its version stamp), and the directory once it is empty; "
+                         "--store home project stores in it are kept")
     args = ap.parse_args(argv)
 
     root = init._project_root()
@@ -100,16 +141,17 @@ def main(argv: list[str] | None = None, *, prog: str = "lore uninstall") -> int:
 
     home = instructions.home()
     if args.yes and home.is_dir():
-        shutil.rmtree(home, ignore_errors=True)
-        print(f"removed:   {home}")
+        gone = _clean_home(home, sys.stdout)
         removed = True
-        # The link a 0.6.0 upgrade left at the old path, now pointing at nothing.
+        # The link a 0.6.0 upgrade left at the old path. Only ours, and only once the
+        # home is gone: a pre-0.6.0 `--store home` project reaches its kept pages
+        # through it.
         legacy = instructions.legacy_home()
-        if legacy.is_symlink() and not legacy.exists():
+        if gone and legacy.is_symlink() and legacy.resolve() == home.resolve():
             legacy.unlink()
             print(f"removed:   {legacy}  (the link to the old location)")
     elif home.is_dir():
-        print(f"kept:      {home}  (pass --yes to remove it too)")
+        print(f"kept:      {home}  (pass --yes to remove the block file in it too)")
 
     if not removed:
         print("nothing to remove: no block in any agent's instruction file, no MCP server "

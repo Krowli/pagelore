@@ -218,8 +218,9 @@ lore uninstall [--yes]
 ```
 
 Takes out what `lore init` wrote — see
-[installation](installation.md#uninstalling). `--yes` also removes
-`~/.pagelore/` (the block, not your pages).
+[installation](installation.md#uninstalling). `--yes` also removes pagelore's
+own files in `~/.pagelore/` (the block and its version stamp), and the directory
+once that leaves it empty; `--store home` project stores in it are kept and listed.
 
 ### `lore mcp`
 
