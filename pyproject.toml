@@ -7,7 +7,7 @@ name = "pagelore"
 dynamic = ["version"]
 description = "Durable project memory as markdown pages on disk, searchable without a server"
 readme = "README.md"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.9"
 authors = [{ name = "Yehven Shcherbynskyi", email = "lionmause999@gmail.com" }]
