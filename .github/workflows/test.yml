@@ -232,7 +232,8 @@ jobs:
 
           def digest(data): return hashlib.sha256(data).hexdigest()
 
-          tree = {str(p.relative_to("src")): digest(p.read_bytes())
+          # as_posix: tar member names always use "/", Windows paths do not.
+          tree = {p.relative_to("src").as_posix(): digest(p.read_bytes())
                   for p in sorted(Path("src/pagelore").rglob("*"))
                   if p.is_file() and "__pycache__" not in p.parts}
 
