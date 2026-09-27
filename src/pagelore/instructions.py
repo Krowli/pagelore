@@ -39,6 +39,9 @@ HOME_DIRNAME = ".pagelore"
 LEGACY_HOME_DIRNAME = ".project-memory"
 STAMP = ".version"
 BLOCK = "AGENT.md"
+# Every project `lore init --scope project` connected, one absolute path per line.
+# `uninstall` runs from one directory and has to reach all of them.
+PROJECTS = "projects"
 
 # Fences around what `lore init` writes into an agent's instruction file, so a
 # second run replaces its own block instead of stacking another copy, and

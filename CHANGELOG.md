@@ -6,6 +6,15 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`lore uninstall` cleans every connected project, not only the one underfoot.**
+  `lore init --scope project` now records the project in `~/.pagelore/projects`, and
+  uninstall removes the instruction-file block and the MCP entry from each recorded
+  project wherever it is run from. Before, a block in any other repository survived
+  and dangled once `--yes` deleted the block file. Projects connected by earlier
+  versions were not recorded; run `lore uninstall` inside each of them once.
+
 ## [0.8.0] - 2026-09-27
 
 ### Changed

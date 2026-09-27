@@ -96,10 +96,11 @@ that cannot load an `@path` does not error, it just stops searching.
 `lore uninstall` removes only what `lore init` wrote:
 
 - the fenced block in `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md` and
-  `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`), and — inside a git
-  repository — in that project's `CLAUDE.md`, `GEMINI.md` and `AGENTS.md`;
+  `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`), and in the `CLAUDE.md`,
+  `GEMINI.md` and `AGENTS.md` of the project you are in and of every project
+  `lore init --scope project` connected (recorded in `~/.pagelore/projects`);
   everything you wrote around the fence stays;
-- the `pagelore` MCP entry — and a pre-0.6.0 `project-memory` one — in the
+- the `pagelore` MCP entry — and a pre-0.6.0 `project-memory` one — in each such
   project's `.mcp.json` (deleted if it is
   then empty), `.gemini/settings.json` and `.cursor/mcp.json`, and in
   `~/.gemini/settings.json` and `~/.cursor/mcp.json` (those files are never

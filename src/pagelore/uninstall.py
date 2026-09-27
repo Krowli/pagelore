@@ -30,15 +30,16 @@ from .init import MCP_LEGACY, MCP_SERVER, PROJECT_FILES, agent_files, codex_home
 from .lib import LOG_NAME, page_paths
 
 
-def _remove_mcp(root: Path | None, out) -> bool:
+def _remove_mcp(roots: list[Path], out) -> bool:
     """Take the MCP registration back out of every place `lore init` can put it.
     Returns True when anything was removed or a removal command was run or printed."""
     home = Path.home()
     did = False
     # The JSON files this program merges into. `.mcp.json` is ours to delete once it
     # is empty — nothing else writes it here — and settings.json never is.
-    json_files = ([root / ".mcp.json", root / ".gemini" / "settings.json",
-                   root / ".cursor" / "mcp.json"] if root else []) \
+    json_files = [path for root in roots
+                  for path in (root / ".mcp.json", root / ".gemini" / "settings.json",
+                               root / ".cursor" / "mcp.json")] \
         + [home / ".gemini" / "settings.json", home / ".cursor" / "mcp.json"]
     # Both names: the server was `project-memory` before 0.6.0.
     for path in json_files:
@@ -73,7 +74,7 @@ def _remove_mcp(root: Path | None, out) -> bool:
 # version stamp, and the scratch copies `atomic_write` leaves if it dies mid-write.
 # Everything else in there — above all a `lore init --store home` project store, which
 # lives at `<home>/<project>/` — is someone's, and `uninstall` never deletes it.
-_PROGRAM_FILES = (instructions.BLOCK, instructions.STAMP)
+_PROGRAM_FILES = (instructions.BLOCK, instructions.STAMP, instructions.PROJECTS)
 _SCRATCH = re.compile(r"^\.(%s)\.\d+\.\d+\.tmp$"
                       % "|".join(re.escape(name) for name in _PROGRAM_FILES))
 
@@ -116,13 +117,21 @@ def main(argv: list[str] | None = None, *, prog: str = "lore uninstall") -> int:
                          "--store home project stores in it are kept")
     args = ap.parse_args(argv)
 
-    root = init._project_root()
-    # Both scopes: the global files, and the project's own when `lore init --scope
-    # project` may have written there. A block left in a project file dangles just
-    # like a global one once the block file is gone.
+    # Both scopes: the global files, and the project files of every repository
+    # `lore init --scope project` connected — not only the one underfoot. A block
+    # left in a project file dangles just like a global one once the block file is
+    # gone, and uninstall runs from wherever the user happens to stand.
+    roots = []
+    for root in [init._project_root(), *init.remembered_projects()]:
+        if root is None:
+            continue
+        if not root.is_dir():
+            print(f"skipped:   {root}  (connected once, no longer exists)")
+            continue
+        roots.append(root.resolve())
+    roots = list(dict.fromkeys(roots))
     targets = [target for _, target, _ in agent_files().values() if target is not None]
-    if root is not None:
-        targets += [root / name for name in dict.fromkeys(PROJECT_FILES.values())]
+    targets += [root / name for root in roots for name in dict.fromkeys(PROJECT_FILES.values())]
     removed = False
     for target in dict.fromkeys(targets):
         if not target.is_file():
@@ -137,7 +146,7 @@ def main(argv: list[str] | None = None, *, prog: str = "lore uninstall") -> int:
         except OSError as exc:
             print(f"skipped:   {target} ({exc})", file=sys.stderr)
 
-    removed = _remove_mcp(root, sys.stdout) or removed
+    removed = _remove_mcp(roots, sys.stdout) or removed
 
     home = instructions.home()
     if args.yes and home.is_dir():
