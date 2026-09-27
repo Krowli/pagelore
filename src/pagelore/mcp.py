@@ -125,6 +125,7 @@ def do_search(args: dict, store: Path) -> tuple[str, bool]:
     query = args.get("query", "")
     hits = memory_search.search(query, store, k=int(args.get("limit", 10)),
                                 touching=args.get("touching") or None)
+    memory_search.annotate(hits, store)
     if not hits:
         return f"no matches in {store}", False
     lines = [f"{len(hits)} hit(s) in {store}"]

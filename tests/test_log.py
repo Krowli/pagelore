@@ -66,10 +66,27 @@ def test_refusal_is_logged_with_a_countable_code(repo):
      "bad_slug"),
     (["--slug", "f", "--title", "T", "--kind", "bug", "--source", "src/real.ts"], None,
      "no_body"),
+    (["--slug", "g", "--title", "T", "--kind", "bug", "--source", "src/real.ts"],
+     LONG + "\nAKIA1234567890ABCDEF", "secret_in_body"),
 ])
 def test_every_refusal_reason_has_its_own_code(repo, args, body, code):
     assert write(repo, *args, body=body) == 1
     assert entries(repo)[-1]["code"] == code
+
+
+def test_a_high_entropy_write_logs_its_warning_code(repo):
+    body = LONG + "\nZk3x9QpL2vB8mR7tN0yC5wJ1hU4sD6eA9gT3iX7oV2z"
+    write(repo, "--slug", "warn-page", "--title", "T", "--kind", "bug",
+          "--source", "src/real.ts", body=body)
+    e = entries(repo)[-1]
+    assert e["event"] == "write"
+    assert e["warnings"] == ["high_entropy"]
+
+
+def test_a_clean_write_has_no_warnings_field(repo):
+    write(repo, "--slug", "clean-page", "--title", "T", "--kind", "bug",
+          "--source", "src/real.ts")
+    assert "warnings" not in entries(repo)[-1]
 
 
 def test_search_is_logged_with_hit_count(repo):
@@ -81,6 +98,30 @@ def test_search_is_logged_with_hit_count(repo):
     assert e["query"] == "pty hangs"
     assert e["hits"] >= 1
     assert e["top"] == "pty-hangs"
+
+
+def test_search_with_touching_logs_touched_count(repo):
+    write(repo, "--slug", "real-page", "--title", "T", "--kind", "bug",
+          "--source", "src/real.ts")
+    memory_search.search("", repo / ".memory", touching=["src/real.ts"])
+    e = entries(repo)[-1]
+    assert e["touching"] == ["src/real.ts"]
+    assert e["touched"] == 1
+
+
+def test_search_touching_a_path_with_no_page_logs_touched_zero(repo):
+    memory_search.search("", repo / ".memory", touching=["src/nope.ts"])
+    e = entries(repo)[-1]
+    assert e["touching"] == ["src/nope.ts"]
+    assert e["touched"] == 0
+
+
+def test_search_without_touching_has_no_touched_field(repo):
+    write(repo, "--slug", "pty-hangs", "--title", "PTY hangs", "--kind", "bug",
+          "--source", "src/real.ts")
+    memory_search.search("pty hangs", repo / ".memory")
+    e = entries(repo)[-1]
+    assert "touched" not in e
 
 
 def test_search_with_no_hits_is_still_logged(repo):

@@ -47,6 +47,21 @@ Recency only breaks ties. A page under the 200-character floor is skipped and
 named on stderr and in `--json`, so it can be rewritten; a page with no sources is
 shown, marked `⚠ no sources`. Ranking: [retrieval](retrieval.md).
 
+A hit whose `sources` have moved on since the page was written is marked, from
+git history: `⚠ source changed: a.py, b.py` when a source's last commit is newer
+than the page's own, `⚠ source gone: c.py` when a source no longer exists.
+`--json` carries the same two lists as `stale_sources` and `gone_sources` on
+every hit, always present, possibly empty. Neither marker changes ranking or
+appears at all outside a git work tree — no repository, no `git` binary, a
+timed-out call — because `gone` cannot be decided reliably without the project
+root, and that root is only known here because git named it.
+
+`changed` is decided by comparing git commit times, so it needs the store
+itself to be committed. The default store mode (`lore init`'s default) adds
+`.memory/` to `.gitignore`, and a `home` store lives outside the repo
+entirely — in both, pages are never committed, so `changed` never fires; only
+`gone` (decided from the filesystem, not git) still appears.
+
 ### `lore show <slug>`
 
 ```
@@ -54,7 +69,11 @@ lore show [--store STORE] slug
 ```
 
 Prints one page, by the slug a search printed. If the page was superseded, stderr
-says which page to read instead.
+says which page to read instead. stdout is always exactly the file on disk; stderr
+also prints `linked from: a, b` — the other pages in the store whose `[[slug]]`
+names this one, sorted, when there are any — and, same as search,
+`⚠ source changed: a.py` / `⚠ source gone: b.py` when git history says a source
+moved on after the page (nothing outside a git work tree).
 
 ### `lore list`
 
@@ -70,17 +89,25 @@ Every page, newest first, with kind and date; superseded pages are marked.
 lore stats [--store STORE] [--since SINCE] [--json]
 ```
 
-What the store has been doing, from its log: writes (new, merged, median size),
-refusals, searches and the ones that returned nothing, sessions that searched and
-never wrote. `--since` takes an ISO date, e.g. `2026-08-09`.
+What the store has been doing, from its log: writes (new, merged, unchanged,
+median size), refusals, searches and the ones that returned nothing,
+`--touching` searches and the ones whose path found no page, sessions that
+searched and never wrote. `--since` takes an ISO date, e.g. `2026-08-09`.
+
+The `touching` line reads its miss count against how many of those searches
+were run after the `touched` field existed to measure them (`measured`), not
+against the total — a log spanning the field's introduction otherwise reads as
+a much lower miss rate than the measurable slice actually had.
 
 ```
 2026-08-17T18:31:03 … 2026-09-16T23:35:03
 
-writes       24   (19 new, 5 merged, median 1536 chars)
+writes       24   (19 new, 5 merged, 0 unchanged, median 1536 chars)
 refused       0   (0% of write attempts)
 searches     41   (7% returned nothing)
             miss: terminal pane rendering Zenith Tauri
+touching      47   (3 measured, 1 found no page touching the path)
+            miss: src/legacy/pty-pool.ts
 sessions      1   (0 searched and never wrote, 4.00 writes per session)
 ```
 
@@ -119,6 +146,13 @@ Re-running the same slug replaces same-header sections in place and appends new
 ones, printing `replaced:` and `appended:` for each, so amendments are cheap and
 safe. Concurrent writers on one slug are serialised by a per-page lock.
 
+A re-run that would produce the exact same page — same title, kind, sources and
+body — does not touch the file or its `updated` date: it prints `unchanged:
+nothing to write` on stderr instead, still exits 0, and still prints the path.
+Otherwise the same no-op write would look like a fresh edit later, to `git log`
+and to anything that treats a recent `updated` as a sign the page was checked
+against the code again.
+
 **Writes are refused, not requested.** Asking an agent in prose to keep a
 knowledge base tidy does not work — measured on a real corpus it produced 104
 auto-generated stubs averaging 139 characters that took the top two result slots.
@@ -126,6 +160,10 @@ So `lore write` exits 1 and prints a `FIX:` line naming the next command when a
 page has:
 
 - no `--source`, or a `--source` path that does not exist;
+- a title or body that looks like a committed credential (an AWS access key,
+  a GitHub token — classic or fine-grained, an Anthropic or OpenAI API key, a
+  Slack token, or a PEM private key header) — checked ahead of the length
+  floor below, because a secret is the more urgent problem;
 - a resulting page under 200 characters — measured on the page that will exist,
   so a short amendment to a substantial page is fine while a thin new page is not;
 - an unknown `--kind`, or a slug that is not kebab-case;
@@ -133,7 +171,29 @@ page has:
 
 `--slug` and `--title` are required by the parser and produce its usage error; the
 others are checked by the gate so that the refusal carries a `FIX:` line the agent
-acts on.
+acts on. The refusal for a credential names its kind and location only — `title`,
+or `body line N` counting the `--body` text on its own (not the title) — never
+the matched value, since the refusal reason is written to the store's log.
+
+A long random-looking string (base64/hex-like, 40+ characters, Shannon entropy
+at or above 4.5 bits/character) does not refuse the write — it has false
+positives on legitimate long tokens — but prints a warning to stderr after a
+successful write, exit code still 0:
+
+```
+⚠ body line 12 looks like a credential (high-entropy string) — if it is one, remove it and rewrite the page
+```
+
+A `[[slug]]` link whose target has no page in the store is the same kind of
+non-fatal problem — the write still succeeds, exit code 0, with one line per
+distinct dangling target on stderr:
+
+```
+⚠ [[some-other-page]] names no page in this store — write it, or fix the slug
+```
+
+This is a warning rather than a refusal because an agent legitimately writes
+page A linking to page B before B exists.
 
 Page format: [page format](page-format.md).
 
@@ -268,7 +328,11 @@ Writes, refusals and queries are appended to `.memory/.log.jsonl`, each line
 stamped with the Claude Code session id when the shell exports one
 (`CLAUDE_CODE_SESSION_ID`). The store carries its own `.gitignore` for that file,
 so it stays out of commits under every store mode — it holds every query anyone
-typed. `lore stats` reads it: a refusal rate concentrated on one code usually
-means a rule is wrong rather than the writer; searches that return nothing point
-at a hole in the corpus or in ranking; sessions that searched and never wrote are
-the write side's "did it happen".
+typed. A search that passed `--touching` also logs `touched`: how many of the
+returned hits were pages whose `sources` named one of those paths, so a search
+that found nothing touching the path is distinguishable from one that never had
+a touching page to find. `lore stats` reads it: a refusal rate concentrated on
+one code usually means a rule is wrong rather than the writer; searches that
+return nothing point at a hole in the corpus or in ranking; `--touching`
+searches that found no page point at a source no page cites yet; sessions that
+searched and never wrote are the write side's "did it happen".

@@ -56,7 +56,16 @@ Write the body for someone who has forgotten the incident: what was observed,
 why it happened, what was decided, and what would make you revisit it. One topic
 per page — if a page needs "and also", split it. Cross-reference with
 `[[slug]]`, which is the page's filename without the extension, so following one
-is a single read.
+is a single read. `[[slug|anchor text]]` names the target the same way and lets
+the link read naturally in a sentence. A link inside a fenced code block or an
+inline code span is read as literal text, not a cross-reference, so quoting
+`[[slug]]` in an example does not count as one.
+
+`lore write` warns, on stderr, when `[[slug]]` names no page in the store — it
+does not refuse the write, because an agent often writes the page that explains
+something before the page it points at exists yet. `lore show <slug>` prints, also
+on stderr, which other pages link to the one being shown, so the reverse
+direction does not require reading every page by hand.
 
 Re-running the same slug replaces same-header sections in place and appends new
 ones; the command prints what it replaced. Sections are matched on `## ` lines

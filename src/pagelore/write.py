@@ -21,26 +21,152 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import math
 import re
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .cli import add_version
 from .lib import (
+    _FENCE,
     MIN_BODY,
     StoreUnavailable,
     atomic_write,
     ensure_store,
     find_store,
     is_page,
+    links,
     log_event,
     page_lock,
     parse_page,
+    read_text,
+    resolve_source,
     store_problem,
 )
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+# Every exact pattern below needs a left boundary: without one, `sk-` (and
+# every other prefix) also matches mid-word, inside an ordinary kebab-case
+# slug or wiki-link like `risk-assessment-of-the-renderer-pipeline` (contains
+# "sk-assessment...") or `disk-image-based-backup-strategy` (contains
+# "sk-image..."). A real credential is never preceded by another identifier
+# character, so requiring that the character before the match is not
+# alphanumeric/underscore/hyphen is exact, not a heuristic.
+_BOUNDARY = r"(?<![A-Za-z0-9_-])"
+
+# Exact credential formats. Each is refused outright — an exact match is cheap
+# to get right and expensive to get wrong, so there is no threshold to tune.
+# AWS, the classic GitHub token and the OpenAI key were checked against the
+# legacy detector this replaces (secret_detector.rs:77-87). The rest were
+# checked against an official source or gitleaks' own default ruleset, cited
+# next to each pattern, and only formats that verified this way are included.
+_SECRET_PATTERNS: list[tuple[str, re.Pattern]] = [
+    ("aws_access_key", re.compile(_BOUNDARY + r"AKIA[0-9A-Z]{16}")),
+    ("github_token", re.compile(_BOUNDARY + r"gh[ps]_[A-Za-z0-9]{36}")),
+    # GitHub fine-grained PAT. Verified against GitHub's own announcement:
+    # https://github.blog/security/application-security/introducing-fine-grained-personal-access-tokens-for-github/
+    # (`\bgithub_pat_[0-9A-Za-z_]{36,}\b`).
+    ("github_fine_grained_pat", re.compile(_BOUNDARY + r"github_pat_[0-9A-Za-z_]{36,}")),
+    # Anthropic API key. Verified against Anthropic's own docs, which show a
+    # partial key as "sk-ant-api03-R2D...igAA":
+    # https://platform.claude.com/docs/en/api/admin/api_keys/retrieve
+    # Checked, and its match excluded, before the OpenAI pattern below so one
+    # key produces one finding rather than two.
+    ("anthropic_api_key", re.compile(_BOUNDARY + r"sk-ant-[A-Za-z0-9_\-]{32,}")),
+    ("openai_api_key", re.compile(_BOUNDARY + r"sk-(?!ant-)[A-Za-z0-9_\-]{32,}")),
+    # Slack bot/user/legacy-workspace tokens. Verified against gitleaks'
+    # default ruleset: https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+    ("slack_token", re.compile(
+        _BOUNDARY + r"(?:xoxb-[0-9]{10,13}-[0-9]{10,13}[a-zA-Z0-9-]*"
+        r"|xox[pe](?:-[0-9]{10,13}){3}-[a-zA-Z0-9-]{28,34}"
+        r"|xox[ar]-(?:\d-)?[0-9a-zA-Z]{8,48})")),
+    # PEM private key header. Verified against gitleaks' default ruleset (same
+    # source as above); the opening delimiter alone is enough to flag it. No
+    # left boundary: the delimiter itself starts with `-----`, so requiring a
+    # non-hyphen character before it would be wrong, not safer.
+    ("private_key_pem",
+     re.compile(r"-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----")),
+]
+
+# A run of base64/hex-alphabet characters whose Shannon entropy is at or above
+# this many bits per symbol reads as random, not written. The formula and the
+# threshold are from the legacy detector this replaces (secret_detector.rs:111).
+# A 40-char hex SHA never reaches it (at most log2(16) = 4.0 bits/char), so
+# hashes and long snake_case identifiers pass through as plain text.
+_ENTROPY_RE = re.compile(r"[A-Za-z0-9+/=_\-]{40,}")
+_ENTROPY_THRESHOLD = 4.5
+
+
+def _shannon_entropy(s: str) -> float:
+    length = len(s)
+    counts = Counter(s)
+    return -sum((n / length) * math.log2(n / length) for n in counts.values())
+
+
+def find_secrets(text: str) -> list[tuple[str, int]]:
+    """Scan for exact credential formats, line by line.
+
+    Takes the raw title/body as typed, not the page that results from merging
+    with what is already on disk — old content already passed this check once,
+    so re-scanning it on every amendment would cost time for no new safety.
+    """
+    found: list[tuple[str, int]] = []
+    seen: set[tuple[str, int]] = set()
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        for kind, pattern in _SECRET_PATTERNS:
+            if pattern.search(line) and (kind, line_no) not in seen:
+                seen.add((kind, line_no))
+                found.append((kind, line_no))
+    return found
+
+
+def find_high_entropy(text: str) -> list[int]:
+    """Line numbers containing a long run that reads as random, not written.
+
+    Non-fatal by design: unlike `find_secrets`, this has false positives on
+    legitimate content (long tokens, encoded blobs), so it warns instead of
+    refusing the write.
+    """
+    lines: list[int] = []
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        for match in _ENTROPY_RE.finditer(line):
+            if _shannon_entropy(match.group()) >= _ENTROPY_THRESHOLD:
+                lines.append(line_no)
+                break
+    return lines
+
+
+def locate_secrets(title: str, body: str) -> list[tuple[str, str]]:
+    """`find_secrets`, but naming *where* in human terms.
+
+    Title and body are scanned and numbered separately: `--body` is what the
+    agent actually typed, so "line 3" has to mean the third line of the body
+    text, not the third line of some internal concatenation with the title.
+    """
+    locations: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for kind, _ in find_secrets(title):
+        if (kind, "title") not in seen:
+            seen.add((kind, "title"))
+            locations.append((kind, "title"))
+    for kind, line_no in find_secrets(body):
+        where = f"body line {line_no}"
+        if (kind, where) not in seen:
+            seen.add((kind, where))
+            locations.append((kind, where))
+    return locations
+
+
+def locate_high_entropy(title: str, body: str) -> list[str]:
+    """`find_high_entropy`, but naming *where* in human terms. See `locate_secrets`."""
+    locations: list[str] = []
+    if find_high_entropy(title):
+        locations.append("title")
+    locations.extend(f"body line {n}" for n in find_high_entropy(body))
+    return locations
 
 # Kinds are deliberately few. The corpus that motivated this had a `rationale`
 # kind produced by an automated scan; it became 23% of all pages and none of it
@@ -58,13 +184,6 @@ KINDS = ("decision", "bug", "concept", "howto")
 # possible fix for superseded pages.
 MANAGED_SCALARS = ("slug", "title", "kind", "created", "updated", "status", "superseded_by")
 MANAGED_LISTS = ("supersedes", "sources")
-
-# A fence is three OR MORE backticks or tildes. Matching exactly three was a real
-# bug: quoting a memory page requires a ````-fence around a page that itself
-# contains ```, and the first inner ``` then closed the outer fence, exposing a
-# quoted `## ` line as a heading. CommonMark's rule is used for the close — same
-# character, and at least as long as the opening run.
-_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 
 
 def split_sections(body: str) -> list[tuple[str | None, str]]:
@@ -186,10 +305,21 @@ def render_frontmatter(meta: dict) -> str:
 # possible lost section for a command that never returns.
 UNLOCKED_RETRIES = 3
 
+# Whether the last write_page() call found the candidate page byte-identical to
+# what was already on disk and skipped the write. Module state like search.py's
+# `last_path`/`last_touching`, so write_page's return type (and its ~15 call
+# sites across tests and evals/run.py) stay a bare `Path`: the decision is made
+# once, inside the lock, against the file read under that same lock — a second,
+# unlocked before/after read in main() could disagree with it under a
+# concurrent writer.
+last_unchanged = False
+
 
 def write_page(store: Path, slug: str, title: str, kind: str,
                sources: list[str], body: str,
                supersedes: list[str] | None = None) -> Path:
+    global last_unchanged
+    last_unchanged = False
     if not SLUG_RE.match(slug):
         raise ValueError(
             f"invalid slug {slug!r}: lowercase letters, digits and single hyphens only")
@@ -210,7 +340,12 @@ def write_page(store: Path, slug: str, title: str, kind: str,
             meta: dict = {}
             result = MergeResult(body=body)
             merged_sources, merged_supersedes = sources, supersedes
+            existing_text: str | None = None
             if path.exists():
+                # Tolerant read (replaces a bad byte, retries a Windows sharing
+                # violation): a page with one non-UTF-8 byte in it must still be
+                # rewritable, exactly as it was before this comparison existed.
+                existing_text = read_text(path)
                 existing = parse_page(path)
                 meta = dict(existing.meta)
                 result = merge(existing.body, body)
@@ -219,10 +354,22 @@ def write_page(store: Path, slug: str, title: str, kind: str,
                                            | set(meta.get("supersedes") or []))
             meta.update({
                 "slug": slug, "title": " ".join(title.split()), "kind": kind,
-                "created": meta.get("created", today), "updated": today,
+                "created": meta.get("created", today), "updated": meta.get("updated", today),
                 "sources": merged_sources, "supersedes": merged_supersedes or [],
             })
-            atomic_write(path, render_frontmatter(meta) + result.body.strip() + "\n")
+            new_body = result.body.strip() + "\n"
+            # Render with the PRIOR `updated` first and compare against the file as
+            # read under this same lock. Byte-identical means nothing changed, so
+            # nothing is written — a rewrite that changes nothing must not look
+            # different from the page already on disk, or a no-op re-run bumps the
+            # date, creates a commit, and later "refreshes" a page that the later
+            # staleness check should instead have flagged.
+            candidate = render_frontmatter(meta) + new_body
+            if existing_text is not None and candidate == existing_text:
+                last_unchanged = True
+                return path
+            meta["updated"] = today
+            atomic_write(path, render_frontmatter(meta) + new_body)
             if lock.held:
                 return path
 
@@ -251,6 +398,14 @@ def stamp_superseded(store: Path, slug: str, by_slug: str) -> None:
     path = store / f"{slug}.md"
     with page_lock(path):
         page = parse_page(path)
+        # An identical re-run of the same --supersedes (write_page already skips
+        # the byte-identical rewrite of the *new* page; this is the same idea for
+        # the *old* one) must not rewrite a file or bump its `updated` for a
+        # supersession that already holds — or a no-op re-run would falsely
+        # "refresh" a page nobody touched, the same staleness-hiding bug the
+        # unchanged-write check exists to prevent.
+        if page.meta.get("status") == "superseded" and page.meta.get("superseded_by") == by_slug:
+            return
         meta = dict(page.meta)
         meta.update({"slug": page.slug, "title": page.title, "status": "superseded",
                      "superseded_by": by_slug, "updated": _dt.date.today().isoformat()})
@@ -268,17 +423,6 @@ def reject(store: Path, code: str, reason: str, repair: str, slug: str = "") -> 
     print(f"FIX: {repair}", file=sys.stderr)
     log_event(store, "reject", create=True, code=code, slug=slug, reason=reason)
     return 1
-
-
-def resolve_source(src: str, store: Path) -> Path | None:
-    """Sources are cited relative to the project root, but the command may run
-    from anywhere. Try the store's parent (the project root, since the store is
-    <root>/.memory) and then the working directory."""
-    for base in (store.parent, Path.cwd()):
-        candidate = base / src
-        if candidate.exists():
-            return candidate
-    return Path(src) if Path(src).exists() else None
 
 
 def _supersedes_chain(store: Path, start: str, target: str, depth: int = 20) -> bool:
@@ -306,7 +450,7 @@ def _supersedes_chain(store: Path, start: str, target: str, depth: int = 20) -> 
 
 
 def validate(slug: str, kind: str, sources: list[str], body: str, store: Path,
-             supersedes: list[str], resulting_body: str) -> int | None:
+             supersedes: list[str], resulting_body: str, title: str) -> int | None:
     """Return an exit code to refuse the write, or None to let it through."""
     problem = store_problem(store)
     if problem:
@@ -380,6 +524,20 @@ def validate(slug: str, kind: str, sources: list[str], body: str, store: Path,
             f"superseded, directly or transitively, by {slug!r}",
             "supersede the newest page in that chain, not one already replaced", slug)
 
+    # Ahead of the length check: a page can be rewritten to be longer, but a
+    # committed credential has to be pulled from history, so it is the more
+    # urgent problem. `reason` names the kind and location only — never the
+    # matched value — because `reason` is what `reject()` writes to the log.
+    secrets = locate_secrets(title, body)
+    if secrets:
+        where = ", ".join(f"{kind} in {loc}" for kind, loc in secrets)
+        return reject(
+            store, "secret_in_body",
+            f"the title or body looks like it contains a committed credential: {where}",
+            "remove the value; name the environment variable or the secrets-store "
+            "path instead",
+            slug)
+
     if len(resulting_body.strip()) < MIN_BODY:
         return reject(
             store, "body_too_short",
@@ -444,9 +602,41 @@ def main(argv: list[str] | None = None, *, prog: str = "lore write") -> int:
         result = MergeResult(body=body)
 
     refusal = validate(args.slug, args.kind, args.source, body, store,
-                       args.supersedes, result.body)
+                       args.supersedes, result.body, args.title)
     if refusal is not None:
         return refusal
+
+    # Entropy is checked on the same incoming title/body as locate_secrets, but
+    # never blocks the write: it has false positives on legitimate long
+    # tokens, so it is reported after the fact instead of refused up front.
+    warn_locations = locate_high_entropy(args.title, body)
+    warnings = ["high_entropy"] if warn_locations else []
+
+    # Dangling links are checked against the RESULTING body — the page as it
+    # will read after this write, not just the text this call typed — because
+    # a merge can introduce or drop a `[[slug]]` that was in an earlier
+    # section. A self-link is never dangling: the page being created here
+    # cannot yet exist on disk to be found by the `store / f"{t}.md"` check
+    # below, but it is not a broken reference. Not a refusal: an agent
+    # legitimately writes page A linking to page B before B exists.
+    # A target that is not itself a valid slug can never name a page in this
+    # store, so it is reported dangling without ever touching the filesystem
+    # — `[[../outside]]` or `[[/etc/hosts]]` must not be resolved as a path
+    # relative to the store, the way `[[the-decision]].md` is. A target that
+    # does look like a slug is "present" only through the same is_page()
+    # guard --supersedes uses below: a symlink out of the store must not
+    # count as the page it points at existing.
+    root = store.resolve()
+    dangling: list[str] = []
+    seen_targets: set[str] = set()
+    for target in links(result.body):
+        if target == args.slug or target in seen_targets:
+            continue
+        seen_targets.add(target)
+        if not SLUG_RE.match(target) or not is_page(store / f"{target}.md", root):
+            dangling.append(target)
+    if dangling:
+        warnings.append("dangling_link")
 
     try:
         path = write_page(store, args.slug, args.title, args.kind,
@@ -463,15 +653,33 @@ def main(argv: list[str] | None = None, *, prog: str = "lore write") -> int:
                       "check permissions and free space on that path, then retry",
                       args.slug)
 
+    # write_page is the single authority on this: it decided under its own
+    # lock, against the file as read under that lock. A second before/after
+    # read here raced it — under a concurrent writer between the two reads, a
+    # call that write_page genuinely skipped could still be reported as a
+    # merge, or vice versa.
+    unchanged = last_unchanged
+
     log_event(store, "write", create=True, slug=args.slug, kind=args.kind,
-              mode="merge" if existed else "create", chars=len(body.strip()),
-              replaced=result.replaced, supersedes=args.supersedes)
-    for header in result.replaced:
-        print(f"replaced: {header}", file=sys.stderr)
-    for header in result.appended:
-        print(f"appended: {header}", file=sys.stderr)
+              mode="unchanged" if unchanged else ("merge" if existed else "create"),
+              chars=len(body.strip()),
+              replaced=result.replaced, supersedes=args.supersedes,
+              **({"warnings": warnings} if warnings else {}))
+    if unchanged:
+        print("unchanged: nothing to write", file=sys.stderr)
+    else:
+        for header in result.replaced:
+            print(f"replaced: {header}", file=sys.stderr)
+        for header in result.appended:
+            print(f"appended: {header}", file=sys.stderr)
     for slug in args.supersedes:
         print(f"superseded: {slug}", file=sys.stderr)
+    for loc in warn_locations:
+        print(f"⚠ {loc} looks like a credential (high-entropy string) — "
+              "if it is one, remove it and rewrite the page", file=sys.stderr)
+    for target in dangling:
+        print(f"⚠ [[{target}]] names no page in this store — write it, or fix the slug",
+              file=sys.stderr)
     print(path)
     return 0
 

@@ -6,6 +6,78 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`lore search --touching PATH` logs whether it found a page.** The `search`
+  log line gains `touched`: how many of the returned hits were pages whose
+  `sources` named one of the given paths, logged only when `--touching` was
+  given. `lore stats` gains `touching_searches` (every search that passed
+  `--touching`, old logs included), `touching_measured` (the slice of those
+  that also carry `touched`, i.e. logged after this field shipped — the miss
+  rate is read against this, not against `touching_searches`, so a handful of
+  measured misses is not diluted by every old, unmeasurable line),
+  `touching_misses` (records with `touched == 0`), and the last 15 missed path
+  lists, printed as a `touching` line — `touching N (M measured, K found no
+  page touching the path)` — next to the existing zero-hit search line.
+
+- **`lore search` and `lore show` mark a page whose `sources` moved on after the
+  page did, from git history.** A hit is marked `⚠ source changed: a.py, b.py`
+  when a source's last commit is newer than the page file's own, and
+  `⚠ source gone: c.py` when a source no longer resolves at all — a page and a
+  source landing in the *same* commit are not marked, since that is one clock
+  reading, not two. `--json` hits gain `stale_sources` and `gone_sources`,
+  always present, possibly empty. Neither marker changes ranking. Nothing is
+  marked outside a git work tree (no repository, no `git` binary, a timed-out
+  call) — without git there is no reliable project root to resolve a `gone`
+  source against, so the feature stays silent rather than guess. The check runs
+  once per search, after ranking is done, not inside `search()` itself, so
+  `evals/run.py` (hundreds of `search()` calls per run) pays nothing for it.
+  `changed` needs the store itself to be committed to git — the default,
+  gitignored store mode and a `home` store (outside the repo) never commit
+  pages, so only `gone` appears there; this is not a bug, there is no fallback.
+
+- **`[[slug]]` links are now parsed, checked and surfaced.** `lore write` warns,
+  code `dangling_link`, when a `[[slug]]` in the resulting page names no page in
+  the store — `⚠ [[x]] names no page in this store — write it, or fix the slug`,
+  one line per distinct target, exit code still 0 (it is a warning, not a
+  refusal: an agent legitimately writes page A linking to page B before B
+  exists). `lore show <slug>` prints `linked from: a, b` on stderr — the other
+  pages, sorted, whose `[[slug]]` names the page being shown; stdout is
+  unchanged, still byte-identical to the file. A link inside a fenced code
+  block or an inline code span is read as literal text, not a cross-reference.
+
+- **`lore write` refuses a title or body that looks like a committed credential**
+  (AWS access key, classic or fine-grained GitHub token, Anthropic or OpenAI API
+  key, Slack token, PEM private key header), code `secret_in_body`. The refusal
+  names the kind and line number only, never the matched value, since the reason
+  is written to the store's log. A long random-looking string (40+ chars,
+  Shannon entropy ≥ 4.5 bits/char) does not refuse the write — that check has
+  false positives on legitimate long tokens — but warns on stderr after a
+  successful write: `⚠ body line N looks like a credential (high-entropy
+  string) — if it is one, remove it and rewrite the page` (or `⚠ title looks
+  like a credential …` for the title). `lore stats` gains `warn_codes`,
+  grouped the same way as `reject_codes`.
+- **A "looks like an existing page" warning on `lore write` was measured and
+  not built.** `evals/duplicate_probe.py` first measured Jaccard and TF-IDF
+  cosine over tokenized title+body per *pair* (11 supersedes pairs as
+  positives against the eval corpus's other 3994 pairs), which looked
+  promising — Jaccard reached 0.818 recall at a 0.93% false-positive rate. But
+  the write path does not compare one pair: it compares one new page against
+  every other page in the store and warns on the single best match, which is
+  90 chances per write for an unrelated page to score high by accident, not
+  one. Re-measured per write, recall collapsed to 0.09 (jaccard) / 0.00
+  (tfidf cosine) at the same 1%-false-warnings budget — below the 0.5 floor
+  the decision was made against. See `.memory/duplicate-warning-measured.md`.
+
+### Fixed
+
+- **`lore write` no longer bumps `updated` on a byte-identical rewrite.**
+  Re-running the exact same slug/title/kind/sources/body used to still refresh
+  the date and rewrite the file, which made a no-op re-run look like a real
+  edit to `git log` and to anything using `updated` as a staleness signal.
+  Prints `unchanged: nothing to write` on stderr, still exits 0. `lore stats`
+  gains an `unchanged` count next to `new`/`merged`.
+
 ## [0.6.0] - 2026-09-27
 
 ### Changed

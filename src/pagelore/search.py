@@ -40,6 +40,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from . import freshness
 from .cli import add_version
 from .index import lookup
 from .lib import (
@@ -269,6 +270,23 @@ last_touching: dict[str, list[str]] = {}
 # Only the ones that matched: naming every thin page in the store would be the
 # reconcile pass this project refuses to build — a count nobody asked for.
 last_skipped: list[Page] = []
+# slug -> {"changed": [...], "gone": [...]} for the hits `annotate` last ran on.
+# Set by `annotate`, not by `search()` itself: evals call `search()` on the order
+# of 400 queries in one run, and each of those would pay for a `git log`
+# subprocess for nothing, since evals never look at the markers.
+last_drift: dict[str, dict[str, list[str]]] = {}
+
+
+def annotate(hits: list[tuple[float, Page]], store: Path) -> None:
+    """Fill `last_drift` for exactly the pages in `hits` — one `git log` call for
+    the lot, done once results are final rather than while ranking is still
+    scanning candidates. Always reassigns, even for an empty `hits`, so a
+    previous call's markers can never survive into this one: `lore mcp` serves
+    many searches from one long-lived process, and a stale marker from an
+    earlier query would be silently wrong on this one's hits."""
+    global last_drift
+    pages = [p for _, p in hits]
+    last_drift = freshness.drift(pages, store) if pages else {}
 
 
 def order(hits: list[tuple[float, Page]], k: int,
@@ -371,9 +389,16 @@ def search(query: str, store: Path, k: int = 10,
     # telemetry that made it possible to benchmark ranking on real queries rather
     # than invented ones. A search never creates the store — a read-only
     # operation must not dirty a working tree that never opted in.
+    #
+    # `touched` counts the RETURNED hits (after ordering and truncation to k)
+    # whose slug is in last_touching, not len(last_touching) — that would count
+    # touching pages the thin-page filter or the k cutoff dropped before the
+    # agent ever saw them.
     log_event(store, "search", query=query, hits=len(hits),
               top=hits[0][1].slug if hits else None,
-              **({"touching": paths} if paths else {}),
+              **({"touching": paths,
+                  "touched": sum(1 for _, p in hits if p.slug in last_touching)}
+                 if paths else {}),
               **({"skipped": len(last_skipped)} if last_skipped else {}))
     return hits
 
@@ -419,6 +444,12 @@ def format_hit(score: float, page: Page, query: str = "") -> str:
         line += "  ⚠ no sources"
     if page.superseded_by:
         line += f"  ⚠ superseded by {page.superseded_by}"
+    drifted = last_drift.get(page.slug)
+    if drifted:
+        if drifted.get("changed"):
+            line += f"  ⚠ source changed: {', '.join(drifted['changed'])}"
+        if drifted.get("gone"):
+            line += f"  ⚠ source gone: {', '.join(drifted['gone'])}"
     return line
 
 
@@ -452,6 +483,7 @@ def main(argv: list[str] | None = None, *, prog: str = "lore search") -> int:
     store = args.store or find_store()
     query = " ".join(args.query)
     hits = search(query, store, args.k, args.touching)
+    annotate(hits, store)
 
     if args.json:
         print(json.dumps(
@@ -461,6 +493,8 @@ def main(argv: list[str] | None = None, *, prog: str = "lore search") -> int:
                        "updated": p.updated, "superseded_by": p.superseded_by,
                        "sources": list(p.meta.get("sources") or []),
                        "touching": last_touching.get(p.slug, []),
+                       "stale_sources": last_drift.get(p.slug, {}).get("changed", []),
+                       "gone_sources": last_drift.get(p.slug, {}).get("gone", []),
                        "path": str(p.path)} for s, p in hits]},
             ensure_ascii=False, indent=2))
         return 0

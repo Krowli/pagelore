@@ -12,8 +12,9 @@ import argparse
 import sys
 from pathlib import Path
 
+from . import freshness
 from .cli import add_version
-from .lib import find_page, find_store, read_text, refuse_missing
+from .lib import find_page, find_store, links, load_pages, read_text, refuse_missing
 
 
 def main(argv: list[str] | None = None, *, prog: str = "lore show") -> int:
@@ -33,6 +34,21 @@ def main(argv: list[str] | None = None, *, prog: str = "lore show") -> int:
         # page has to say it on its own, and on stderr so the page itself is clean.
         print(f"\u26a0 superseded by {page.superseded_by} \u2014 read that first: "
               f"{cmd} show {page.superseded_by}", file=sys.stderr)
+    # Backlinks, not the page's own forward links: an agent that opens a page
+    # can already see what it cites, the frontmatter and body are right there.
+    # What it cannot see without reading every other page is who else already
+    # points here \u2014 stdout stays byte-identical to the file, so this goes on
+    # stderr alongside the superseded notice.
+    backlinks = sorted({p.slug for p in load_pages(store)
+                        if p.slug != page.slug and page.slug in links(p.body)})
+    if backlinks:
+        print(f"linked from: {', '.join(backlinks)}", file=sys.stderr)
+    drifted = freshness.drift([page], store).get(page.slug)
+    if drifted:
+        if drifted.get("changed"):
+            print(f"⚠ source changed: {', '.join(drifted['changed'])}", file=sys.stderr)
+        if drifted.get("gone"):
+            print(f"⚠ source gone: {', '.join(drifted['gone'])}", file=sys.stderr)
     sys.stdout.write(read_text(page.path))
     return 0
 
