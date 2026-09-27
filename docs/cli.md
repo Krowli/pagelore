@@ -278,9 +278,14 @@ lore uninstall [--yes]
 ```
 
 Takes out what `lore init` wrote — see
-[installation](installation.md#uninstalling). `--yes` also removes pagelore's
-own files in `~/.pagelore/` (the block and its version stamp), and the directory
-once that leaves it empty; `--store home` project stores in it are kept and listed.
+[installation](installation.md#uninstalling) — in the global files and in every
+project `lore init --scope project` connected, wherever you run it from: init
+records each such project in `~/.pagelore/projects`. A recorded project that no
+longer exists is reported and skipped. Projects connected by a version before
+0.8.1 were not recorded; run `lore uninstall` inside each of them. `--yes` also
+removes pagelore's own files in `~/.pagelore/` (the block, its version stamp and
+the list of projects), and the directory once that leaves it empty; `--store home`
+project stores in it are kept and listed.
 
 ### `lore mcp`
 

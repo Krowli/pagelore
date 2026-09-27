@@ -1068,3 +1068,75 @@ def test_json_puts_one_document_on_stdout_and_the_messages_on_stderr(machine, ca
                "--json"], stdin=io.StringIO(""), stdout=out, interactive=False)
     assert {c["action"] for c in json.loads(out.getvalue())["changes"]
             if c["path"]} == {"unchanged"}
+
+
+# `uninstall` runs from wherever the user happens to stand, but `lore init --scope
+# project` may have connected several repositories. A block left behind in one of
+# them includes a block file `uninstall --yes` deletes — the dangling include this
+# command exists to prevent — and it was found for real in a second project after
+# an uninstall had reported success. So init remembers every project it connects,
+# and uninstall walks all of them.
+
+def _connect_project(project: Path, monkeypatch, via: str = "file") -> None:
+    monkeypatch.chdir(project)
+    code, _ = run("", ["--agent", "claude", "--scope", "project", "--via", via, "--yes"],
+                  interactive=False)
+    assert code == 0
+
+
+def _second_project(tmp_path: Path) -> Path:
+    other = tmp_path / "other"
+    other.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=other, check=True)
+    return other
+
+
+def test_uninstall_cleans_a_project_connected_elsewhere(machine, tmp_path, monkeypatch):
+    _, project = machine
+    other = _second_project(tmp_path)
+    _connect_project(other, monkeypatch)
+    assert instructions.MARK_BEGIN in (other / "CLAUDE.md").read_text(encoding="utf-8")
+
+    monkeypatch.chdir(project)
+    assert uninstall.main([]) == 0
+    assert instructions.MARK_BEGIN not in (other / "CLAUDE.md").read_text(encoding="utf-8")
+
+
+def test_uninstall_removes_the_mcp_entry_of_a_project_connected_elsewhere(
+        machine, tmp_path, monkeypatch):
+    _, project = machine
+    other = _second_project(tmp_path)
+    _connect_project(other, monkeypatch, via="mcp")
+    assert (other / ".mcp.json").is_file()
+
+    monkeypatch.chdir(project)
+    assert uninstall.main([]) == 0
+    assert not (other / ".mcp.json").exists()
+
+
+def test_uninstall_skips_a_remembered_project_that_is_gone(machine, tmp_path, monkeypatch,
+                                                           capsys):
+    _, project = machine
+    other = _second_project(tmp_path)
+    _connect_project(other, monkeypatch)
+    # Leave it first: Windows refuses to delete the working directory.
+    monkeypatch.chdir(project)
+    shutil.rmtree(other)
+
+    assert uninstall.main([]) == 0
+    assert "no longer exists" in capsys.readouterr().out
+
+
+def test_a_global_init_remembers_no_project(machine):
+    run("", ["--agent", "claude", "--scope", "global", "--via", "file", "--yes"],
+        interactive=False)
+    assert not (instructions.home() / instructions.PROJECTS).exists()
+
+
+def test_uninstall_yes_removes_the_list_of_projects(machine, tmp_path, monkeypatch):
+    _, project = machine
+    _connect_project(project, monkeypatch)
+    assert (instructions.home() / instructions.PROJECTS).is_file()
+
+    assert uninstall.main(["--yes"]) == 0
+    assert not instructions.home().exists()

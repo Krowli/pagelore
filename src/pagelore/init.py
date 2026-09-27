@@ -160,6 +160,28 @@ def _project_root() -> Path | None:
     return Path(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
 
 
+def remembered_projects() -> list[Path]:
+    """The projects `lore init --scope project` connected, oldest first."""
+    try:
+        text = (instructions.home() / instructions.PROJECTS).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    return [Path(line) for line in dict.fromkeys(text.splitlines()) if line.strip()]
+
+
+def remember_project(root: Path) -> None:
+    """Record a project this run wrote into, so `uninstall` can find it from anywhere.
+    A block left in a project nobody remembered dangles once the block file is gone —
+    found for real in a second repository after an uninstall reported success."""
+    root = root.resolve()
+    if root in remembered_projects():
+        return
+    path = instructions.home() / instructions.PROJECTS
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(f"{root}\n")
+
+
 def manual(cmd: str, out) -> None:
     block = instructions.block_path()
     print(f"""
@@ -682,6 +704,8 @@ def main(argv: list[str] | None = None, *, prog: str = "lore init",
             if not confirmed:
                 print("nothing written", file=out)
         if confirmed:
+            if scope_root is not None:
+                remember_project(scope_root)
             if "file" in via:
                 _write_agents(chosen, cmd, out, scope_root)
             if "mcp" in via:
