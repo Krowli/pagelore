@@ -6,6 +6,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-09-27
+
 ### Fixed
 
 - **`⚠ source changed` now works in the default store mode.** A page that is never
@@ -948,7 +950,8 @@ they found, all of it now covered by a test that fails when the fix is removed:
 - Claude Code plugin and marketplace manifests.
 - Test suite covering search, writing, frontmatter tolerance and manifests.
 
-[Unreleased]: https://github.com/Krowli/pagelore/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/Krowli/pagelore/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/Krowli/pagelore/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/Krowli/pagelore/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Krowli/pagelore/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Krowli/pagelore/compare/v0.6.0...v0.7.0
