@@ -1,0 +1,86 @@
+name: agent-eval
+
+# Real Claude Code sessions against a throwaway project: each one costs API money
+# and minutes, so this runs only when someone asks for it. Nothing else in CI
+# calls evals/agent_eval.py. What it measures is in evals/README.md.
+on:
+  workflow_dispatch:
+    inputs:
+      arms:
+        description: "Comma-separated arms: include, mcp"
+        default: "include,mcp"
+      tasks:
+        description: "Comma-separated task ids from evals/agent_tasks.json"
+        default: "A,B,C,D,E"
+      runs:
+        description: "Sessions per arm × task"
+        default: "3"
+      label:
+        description: "Names the results file, e.g. baseline or guidance"
+        default: "ci"
+      models:
+        description: "Comma-separated model ids (e.g. claude-opus-5-5,claude-sonnet-5); empty = CLI default"
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  agent-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: The API key is there
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::secrets.ANTHROPIC_API_KEY is empty — add it under Settings → Secrets and variables → Actions; every session would fail to authenticate."
+            exit 1
+          fi
+
+      - name: Install
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          pip install -e .
+          claude --version
+          lore --version
+
+      - name: Run the sessions
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ARMS: ${{ inputs.arms }}
+          TASKS: ${{ inputs.tasks }}
+          RUNS: ${{ inputs.runs }}
+          LABEL: ${{ inputs.label }}
+          MODELS: ${{ inputs.models }}
+        run: |
+          version=$(python -c "import pagelore; print(pagelore.__version__)")
+          out="evals/results/agent-$(date +%F)-$version-$LABEL.jsonl"
+          echo "OUT=$out" >> "$GITHUB_ENV"
+          python evals/agent_eval.py --arms "$ARMS" --tasks "$TASKS" --runs "$RUNS" \
+            --label "$LABEL" --models "$MODELS" --out "$out"
+
+      - name: Summary
+        if: always() && env.OUT != ''
+        run: |
+          if [ -e "$OUT" ]; then
+            python evals/agent_eval.py --summarize "$OUT"
+          else
+            echo "::warning::no results file at $OUT"
+          fi
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: agent-eval-${{ inputs.label }}
+          path: evals/results/*.jsonl
+          if-no-files-found: warn

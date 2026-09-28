@@ -76,11 +76,17 @@ QUESTION = ("This project's terminal does not use the graphics card to draw by d
 RELEVANT = "render-canvas-default-renderer"
 
 
-def build_project(directory: Path, pointer: str) -> Path:
+def build_project(directory: Path, pointer: str, files: dict[str, str] | None = None) -> Path:
+    """`files` maps project-relative paths to contents, for a task that needs a real
+    file to edit or cite — `lore write --source` refuses a path that does not exist."""
     project = directory / "project"
     project.mkdir()
     (project / "src").mkdir()
     (project / "src" / "main.ts").write_text("export {}\n", encoding="utf-8")
+    for rel, text in (files or {}).items():
+        path = project / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     harness.materialise(harness.load_corpus()["pages"], project)
 

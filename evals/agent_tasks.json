@@ -1,0 +1,157 @@
+{
+  "about": "Tasks for evals/agent_eval.py. Every task rests on pages of evals/corpus.json (the fictional terminal app Zenith); `pages` names them and `files` are created in the project, each at a path some corpus page cites. Phrases match case-insensitively on word boundaries against the agent's normalised final answer (see agent_eval.normalise); `re:` marks a regex. `answer_any` and `obsolete_any` hold only facts the page itself carries, so general knowledge cannot score; a phrase that is derived from the page rather than quoted from it is also listed in `derived`, and tests check every other phrase against the page text.",
+  "tasks": [
+    {
+      "id": "A",
+      "kind": "why",
+      "prompt": "Why does Zenith compile SQLite into its own binary instead of linking the system SQLite that Linux distributions ship? Answer in two or three sentences.",
+      "pages": [
+        "persist-bundled-sqlite-pin"
+      ],
+      "files": {},
+      "correct_means": "the answer carries a fact only the page has: the pinned 3.45.x build or the 1.4 MB size cost (distro versions are left out: a model knows them without the page)",
+      "answer_any": [
+        "3.45",
+        "1.4 mb"
+      ]
+    },
+    {
+      "id": "B",
+      "kind": "unanswerable",
+      "prompt": "Does Zenith support sixel or the iTerm2 inline image protocol in a pane? Answer in one or two sentences.",
+      "pages": [],
+      "unanswerable": "do we support sixel or the iTerm2 inline image protocol in a pane",
+      "files": {},
+      "correct_means": "no page answers it, so the answer says it is not recorded or not known (correct = abstained)",
+      "abstain_any": [
+        "not recorded",
+        "isn't recorded",
+        "is not recorded",
+        "no record",
+        "no records",
+        "no recorded",
+        "not documented",
+        "isn't documented",
+        "is not documented",
+        "no documentation",
+        "no page",
+        "no pages",
+        "no memory page",
+        "not in the memory",
+        "nothing in the memory",
+        "memory doesn't",
+        "memory does not",
+        "memory has no",
+        "memory has nothing",
+        "memory says nothing",
+        "store has no",
+        "store doesn't",
+        "store does not",
+        "nothing in the store",
+        "doesn't say",
+        "does not say",
+        "doesn't mention",
+        "does not mention",
+        "no mention",
+        "not mentioned",
+        "isn't mentioned",
+        "doesn't cover",
+        "does not cover",
+        "not covered",
+        "couldn't find",
+        "could not find",
+        "can't find",
+        "cannot find",
+        "didn't find",
+        "did not find",
+        "found nothing",
+        "no information",
+        "don't know",
+        "do not know"
+      ]
+    },
+    {
+      "id": "C",
+      "kind": "edit",
+      "prompt": "Change src/terminal/scrollback/journal.ts so that each pane keeps 50 000 lines of scrollback instead of 10 000.",
+      "pages": [
+        "render-scrollback-cap"
+      ],
+      "target": "src/terminal/scrollback/journal.ts",
+      "files": {
+        "src/terminal/scrollback/journal.ts": "export const SCROLLBACK_LINES = 10_000;\nexport const JOURNAL_FILE_BYTES = 32 * 1024 * 1024;\nexport const JOURNAL_FILES = 4;\n\nexport interface PaneScrollback {\n  paneId: string;\n  lines: number;\n  journalPath: string;\n}\n\nexport function scrollbackFor(paneId: string, workspaceDir: string): PaneScrollback {\n  return {\n    paneId,\n    lines: SCROLLBACK_LINES,\n    journalPath: `${workspaceDir}/scrollback/${paneId}.log`,\n  };\n}\n"
+      },
+      "correct_means": "graded on searched_before_edit and used_touching; correct = the answer names the page's constraint: its measured 26 MB per pane / 210 MB for eight panes, the 130 MB that follows for 50 000 lines, or the page by slug",
+      "answer_any": [
+        "26 mb",
+        "210 mb",
+        "130 mb",
+        "render-scrollback-cap"
+      ],
+      "derived": [
+        "130 mb"
+      ]
+    },
+    {
+      "id": "D",
+      "kind": "superseded",
+      "prompt": "How does Zenith retry an agent turn that fails partway through? Answer in two or three sentences.",
+      "pages": [
+        "agents-retries-transport-only",
+        "agents-orchestrator-retry-loop"
+      ],
+      "files": {},
+      "correct_means": "the answer names the current decision with a fact only its page has (before the first response byte, reqwest, 8 retries per run, the Resume button); endorses_obsolete = a fact only the superseded page has (the 1 s/4 s/16 s backoff, ±25% jitter, orchestrator/retry.ts, the reconnecting line) and none of the current ones",
+      "answer_any": [
+        "first response byte",
+        "reqwest",
+        "8 retries",
+        "resume button"
+      ],
+      "obsolete_any": [
+        "re:1 s\\W+(?:and |then )?4 s\\W+(?:and |then )?16 s",
+        "±25%",
+        "25% jitter",
+        "orchestrator/retry.ts",
+        "retry.ts",
+        "reconnecting",
+        "21 seconds"
+      ]
+    },
+    {
+      "id": "E",
+      "kind": "bugfix",
+      "prompt": "A turn that cost $2.01 is stored in the cost ledger as 2009999 micro-dollars instead of 2010000. Fix it in src/agents/cost/ledger.ts.",
+      "pages": [
+        "agents-cost-ledger-per-turn"
+      ],
+      "target": "src/agents/cost/ledger.ts",
+      "files": {
+        "src/agents/cost/ledger.ts": "export interface TurnCost {\n  runId: string;\n  turnIx: number;\n  model: string;\n  usd: number;\n}\n\nexport interface LedgerRow {\n  run_id: string;\n  turn_ix: number;\n  model: string;\n  usd_micros: number;\n}\n\nexport function toMicros(usd: number): number {\n  return Math.floor(usd * 1_000_000);\n}\n\nexport function ledgerRow(cost: TurnCost): LedgerRow {\n  return {\n    run_id: cost.runId,\n    turn_ix: cost.turnIx,\n    model: cost.model,\n    usd_micros: toMicros(cost.usd),\n  };\n}\n"
+      },
+      "correct_means": "the fix is not graded; what is measured is whether a page gets written (wrote_page)"
+    },
+    {
+      "id": "F",
+      "kind": "paraphrase",
+      "prompt": "This morning I rearranged some panes on my desktop. My laptop had been sitting on the desk untouched the whole time, and the new arrangement only showed up there a long while later. Is that expected in Zenith, and why does it work that way? Answer in two or three sentences.",
+      "pages": [
+        "sync-poll-interval-backoff"
+      ],
+      "files": {},
+      "correct_means": "worded without the page's key terms (sync, poll, idle, backoff), so it invites reworded searches; correct = a fact only the page has: the 15-minute idle interval, LIST requests as the cost, the $1,180 bill, MinIO, or bring-your-own-bucket",
+      "answer_any": [
+        "15 min",
+        "15 minutes",
+        "15 minute",
+        "list requests",
+        "1,180",
+        "minio",
+        "bring-your-own-bucket"
+      ],
+      "derived": [
+        "15 minute"
+      ]
+    }
+  ]
+}
