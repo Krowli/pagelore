@@ -70,10 +70,14 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "query": {"type": "string",
-                          "description": "Several words; they are OR'd and ranked."},
+                          "description": "Every word you would try — synonyms, the "
+                                         "component, the symptom — in one query; they "
+                                         "are OR'd and ranked. Search again to ask "
+                                         "something different, not to reword."},
                 "touching": {"type": "array", "items": {"type": "string"},
-                             "description": "File or directory paths: pages written "
-                                            "against them come first."},
+                             "description": "Paths of files you are about to change: "
+                                            "pages written against them come first. "
+                                            "Pass it before editing a file."},
                 "limit": {"type": "integer", "description": "Max results, default 10."},
             },
         },
