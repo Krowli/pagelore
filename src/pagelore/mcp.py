@@ -70,10 +70,13 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "query": {"type": "string",
-                          "description": "Several words; they are OR'd and ranked."},
+                          "description": "Every word you would try — synonyms, the "
+                                         "component, the symptom — in one query; they "
+                                         "are OR'd and ranked."},
                 "touching": {"type": "array", "items": {"type": "string"},
-                             "description": "File or directory paths: pages written "
-                                            "against them come first."},
+                             "description": "Paths of files you are about to change: "
+                                            "pages written against them come first. "
+                                            "Pass it before editing a file."},
                 "limit": {"type": "integer", "description": "Max results, default 10."},
             },
         },
@@ -124,7 +127,7 @@ def resolve_store() -> Path:
 def do_search(args: dict, store: Path) -> tuple[str, bool]:
     query = args.get("query", "")
     hits = memory_search.search(query, store, k=int(args.get("limit", 10)),
-                                touching=args.get("touching") or None)
+                                touching=args.get("touching") or None, via="mcp")
     memory_search.annotate(hits, store)
     if not hits:
         return f"no matches in {store}", False

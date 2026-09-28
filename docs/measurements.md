@@ -179,6 +179,44 @@ version and ten runs per arm, so the default stays the file until a second harne
 or the full three arms say the same.
 
 
+## How agents use it: calls, repeats, `--touching`, per model
+
+`evals/agent_eval.py`, Claude Code 2.1.283, 2026-09-28. Every session is a real
+`claude -p` against a throwaway project built from the evaluation corpus, 10 runs
+per cell, scored from the session's own tool calls and the store's log. Raw
+records are committed in `evals/results/` and re-scored by `--summarize`.
+
+Baseline (the 0.8.2 instruction text), 240 sessions, $24.12:
+
+| | Opus 5.5 file | Opus 5.5 MCP | Sonnet 5 file | Sonnet 5 MCP |
+|---|---|---|---|---|
+| searched, any task | 60/60 | 60/60 | 60/60 | 45/60 |
+| searched, edit-a-file task (C) | 10/10 | 10/10 | 10/10 | **4/10** |
+| searched, fix-a-bug task (E) | 10/10 | 10/10 | 10/10 | **1/10** |
+| `touching` on the edit (C) | 10/10 | 10/10 | 6/10 | 4/10 |
+| correct, question in other words (F) | 10/10 | 10/10 | 10/10 | 10/10 |
+| mean repeats, superseded question (D) | 0 | 0 | 0 | 1.0 |
+
+The measured gap is not the query wording but the route: over MCP, Sonnet mostly
+does not consult the memory when the task is "change this" rather than "answer
+this"; with the instruction file it always does.
+
+Guidance v1 ("every word in one query; search again only to ask something
+different; `--touching` before a change", in a separate paragraph), 240 sessions:
+Sonnet MCP searched on the edit task 10/10, but its paraphrase task over MCP fell to
+4/10 correct (p≈0.011) and, with the instruction file, `touching` on the bugfix
+fell to 3/10 (p≈0.003): the
+"do not reword" sentence stopped Sonnet after a missed first search, and moving
+the `--touching` sentence away from the command example made it stop using it.
+Not shipped.
+
+Guidance v2 (shipped in 0.8.3: "every word in one query", `--touching` kept
+directly under the example, the "do not reword" sentence dropped), 80 sessions on
+the Sonnet cells that v1 moved: touching on edits 21/40 → 28/40 (p=0.17), MCP
+searched on the edit and bugfix tasks 5/20 → 9/20 (p=0.32), paraphrase task 10/10 → 9/10
+(p=1.0). Every change points the right way and none is significant at this n;
+the MCP edit-task gap remains the open problem. Repeats did not move in any run.
+
 ## Speed, and the cost of the gate
 
 One search, end to end, as the command a user types: a fresh process, interpreter

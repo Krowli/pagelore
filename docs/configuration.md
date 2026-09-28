@@ -15,6 +15,7 @@ command-line flag.
 | `PAGELORE_NO_FTS5` | `lore search` | Any non-empty value refuses the SQLite FTS5 index, so search reads and ranks the pages directly — the same path a Python without FTS5 takes. |
 | `PAGELORE_PYTHON` | the npm shim only | The Python interpreter to run. Exclusive: if it does not work, `lore` fails and says so rather than trying another. |
 | `PROJECT_MEMORY_*` | as above | The pre-0.6.0 names of the five variables above. Still read in 0.6.x when the `PAGELORE_*` name is unset, with a one-line warning on stderr; removed in 0.7.0. |
+| `PAGELORE_NO_LOG` | every write and search | Any non-empty value turns off `.memory/.log.jsonl` entirely — `log_event` writes nothing. Set by `evals/speed.py` on the processes it spawns, so a benchmark run never lands in a real log. |
 | `CODEX_HOME` | `init`, `uninstall`, `doctor` | Codex's home directory (default `~/.codex`): the global `AGENTS.md` and `config.toml` are read and written there, as Codex itself does. |
 | `VISUAL`, `EDITOR` | `lore edit` | The editor, in that order; the fallback is `vi` (`notepad` on Windows). |
 | `NO_COLOR`, `TERM=dumb` | `lore init` | Turn off colour in the wizard. A pipe never gets colour. |

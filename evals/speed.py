@@ -91,8 +91,10 @@ def main(argv=None) -> int:
         with tempfile.TemporaryDirectory() as tmp:
             store = harness.materialise(grown(corpus, size), Path(tmp))
             search = [*head, "search", "--store", str(store), *QUERY]
-            warm_env = dict(os.environ)
-            cold_env = dict(os.environ, PAGELORE_NO_FTS5="1")
+            # A benchmark run is not a search an agent asked; it must not land in a
+            # real project's log, so both arms turn logging off.
+            warm_env = dict(os.environ, PAGELORE_NO_LOG="1")
+            cold_env = dict(os.environ, PAGELORE_NO_FTS5="1", PAGELORE_NO_LOG="1")
             subprocess.run(search, capture_output=True, env=warm_env)   # build the index
             warm = median_ms(search, warm_env)
             cold = median_ms(search, cold_env)

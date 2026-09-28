@@ -13,6 +13,7 @@ import datetime
 import locale
 import os
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -280,24 +281,35 @@ def test_output_bytes_invalid_for_the_locale_encoding_do_not_crash(monkeypatch):
     `except (OSError, subprocess.TimeoutExpired)`), crashing the caller instead
     of falling back to no markers.
 
-    `subprocess.run` itself is replaced with a fake that decodes a fixed raw
-    payload exactly the way the real one would given the keyword arguments
-    `last_commits` actually passes — through `encoding=`/`errors=` if given, else
-    through the ambient locale, the same contract `io.TextIOWrapper` uses for
-    `text=True` with no explicit `encoding`. The payload is a real path,
-    "Łukasz.py" (UTF-8: `\\xc5\\x81ukasz.py`), which decodes cleanly as UTF-8 but
-    not as cp1252: byte `0x81` is unassigned there.
+    `subprocess.Popen` itself is replaced with a fake whose `stdout` decodes a
+    fixed raw payload exactly the way the real pipe's `TextIOWrapper` would given
+    the keyword arguments `last_commits` actually passes — through
+    `encoding=`/`errors=` if given, else through the ambient locale, the same
+    contract `text=True` with no explicit `encoding` uses. The payload is a real
+    path, "Łukasz.py" (UTF-8: `\\xc5\\x81ukasz.py`), which decodes cleanly as
+    UTF-8 but not as cp1252: byte `0x81` is unassigned there.
     """
     raw = "\x001600000000\n\nŁukasz.py\n".encode()
 
-    def fake_run(cmd, **kwargs):
-        if "encoding" in kwargs:
-            stdout = raw.decode(kwargs["encoding"], errors=kwargs.get("errors", "strict"))
-        else:
-            stdout = raw.decode(locale.getpreferredencoding(False))
-        return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+    class FakeProc:
+        def __init__(self, cmd, **kwargs):
+            if "encoding" in kwargs:
+                text = raw.decode(kwargs["encoding"], errors=kwargs.get("errors", "strict"))
+            else:
+                text = raw.decode(locale.getpreferredencoding(False))
+            self.stdout = (line for line in text.splitlines(keepends=True))
+            self.returncode = 0
 
-    monkeypatch.setattr(freshness.subprocess, "run", fake_run)
+        def terminate(self):
+            pass
+
+        def kill(self):
+            pass
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    monkeypatch.setattr(freshness.subprocess, "Popen", FakeProc)
     monkeypatch.setattr(locale, "getpreferredencoding", lambda do_setlocale=True: "cp1252")
 
     assert freshness.last_commits(Path("."), ["Łukasz.py"]) == {"Łukasz.py": 1600000000}
@@ -377,3 +389,114 @@ def test_a_home_store_outside_the_repo_is_still_checked(repo, tmp_path):
 
     assert freshness.drift(lib.load_pages(store), store) == \
         {"p": {"changed": ["src/a.py"], "gone": []}}
+
+
+# `last_commits` streams `git log` via `subprocess.Popen` instead of waiting for
+# `subprocess.run` to collect the whole history, and stops reading once every
+# requested path has a timestamp — history is newest-first, so nothing further
+# back could change the answer.
+
+def test_stdout_that_never_ends_after_every_path_is_found_returns_promptly(monkeypatch):
+    """A fake `git` whose stdout keeps yielding commits forever once the one
+    wanted path is already answered. A regression that went back to reading to
+    EOF before checking `remaining` would hang here forever — the join-with-timeout
+    below turns that hang into a failed assertion instead of stalling the suite."""
+
+    def endless():
+        yield "\x001700000000\n"
+        yield "\n"
+        yield "src/a.py\n"
+        yield "\n"
+        while True:
+            yield "src/never-matches.py\n"
+
+    class FakeProc:
+        def __init__(self, *a, **k):
+            self.stdout = endless()
+            self.returncode = 0
+
+        def terminate(self):
+            pass
+
+        def kill(self):
+            pass
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    monkeypatch.setattr(freshness.subprocess, "Popen", lambda *a, **k: FakeProc())
+
+    outcome = {}
+
+    def run():
+        outcome["value"] = freshness.last_commits(Path("."), ["src/a.py"])
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
+    assert not thread.is_alive(), "last_commits kept reading after every path was found"
+    assert outcome["value"] == {"src/a.py": 1700000000}
+
+
+def test_streamed_result_matches_a_full_read_on_a_real_repo(repo):
+    """The expectation is computed independently, one `git log -1` per path, so
+    this does not just check the streaming code against itself."""
+    commit(repo, "src/a.py", "2020-01-01T00:00:00")
+    commit(repo, "src/b.py", "2020-01-02T00:00:00")
+    commit(repo, "src/a.py", "2020-01-03T00:00:00")
+    commit(repo, "src/c.py", "2020-01-04T00:00:00")
+    commit(repo, "src/b.py", "2020-01-05T00:00:00")
+
+    paths = ["src/a.py", "src/b.py", "src/c.py"]
+    expected = {}
+    for p in paths:
+        out = subprocess.run(
+            ["git", "log", "-1", "--format=%ct", "--", p],
+            cwd=repo, capture_output=True, text=True, check=True)
+        expected[p] = int(out.stdout.strip())
+
+    assert freshness.last_commits(repo, paths) == expected
+
+
+def test_a_path_never_committed_still_returns_a_result_for_the_others(repo):
+    """Git has to read to the end of history to be sure a path never appears —
+    `remaining` stays non-empty, so the read loop only stops when git itself
+    exits, not early."""
+    commit(repo, "src/a.py", "2020-01-01T00:00:00")
+    out = subprocess.run(
+        ["git", "log", "-1", "--format=%ct", "--", "src/a.py"],
+        cwd=repo, capture_output=True, text=True, check=True)
+    expected_ts = int(out.stdout.strip())
+
+    result = freshness.last_commits(repo, ["src/a.py", "src/never-committed.py"])
+    assert result == {"src/a.py": expected_ts}
+
+
+def test_timeout_returns_none_and_kills_git(monkeypatch):
+    monkeypatch.setattr(freshness, "GIT_TIMEOUT_SECONDS", 0.05)
+
+    class FakeProc:
+        def __init__(self, *a, **k):
+            self.alive = True
+            self.returncode = None
+            self.stdout = self._gen()
+
+        def _gen(self):
+            while self.alive:
+                yield "src/never-matches.py\n"
+
+        def terminate(self):
+            self.alive = False
+
+        def kill(self):
+            self.alive = False
+            self.returncode = -9
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    fake = FakeProc()
+    monkeypatch.setattr(freshness.subprocess, "Popen", lambda *a, **k: fake)
+
+    assert freshness.last_commits(Path("."), ["src/a.py"]) is None
+    assert fake.returncode == -9  # killed, not merely terminated or let finish

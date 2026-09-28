@@ -20,13 +20,22 @@ Stdlib only.
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
 import sys
-from collections import Counter
+from collections import Counter, deque
 from pathlib import Path
 
 from .cli import add_version
 from .lib import LOG_NAME, find_store
+
+# A search counts as a repeat when the same session asked again within this many
+# seconds and got back the same top page — the paraphrase-and-reask pattern real
+# logs showed, where an agent re-searches instead of trusting the answer it
+# already had. Two minutes, not a shorter window: the point is catching a
+# rephrase after the agent read the first result and judged it insufficient,
+# not catching a double-submit.
+REPEAT_WINDOW_SECONDS = 120.0
 
 
 def read_log(store: Path, since: str | None) -> list[dict]:
@@ -61,6 +70,65 @@ def _median(values: list[int]) -> int:
     return (ordered[mid - 1] + ordered[mid]) // 2
 
 
+def _repeated_searches(searches: list[dict]) -> int:
+    """Count of searches this log's `repeated` line reports.
+
+    Grouped by session — except that every record with NO session is grouped
+    together into one shared stream, rather than being skipped. That is not a
+    loosening for its own sake: records without a session — older logs, and
+    clients that do not pass a session id, as seen in a real log — are
+    grouped as one stream, and a real log showed exactly this stream carrying
+    five rewordings of one question, four of them repeats, that the
+    session-keyed version reported as zero. A log line from before `session`
+    shipped at all falls into the same bucket, for the same reason.
+    The 120-second window keeps the false-positive cost low: two genuinely
+    different agents landing on the same top page for unrelated queries
+    within two minutes of each other is rare, and missing the real,
+    overwhelmingly common case (a session-less majority) is the worse failure
+    of the two.
+
+    Records are chronological, so per stream this keeps only what is still
+    inside the window instead of an ever-growing list scanned with `any()` on
+    every record — that was O(n) per record (O(n²) overall) and made a large
+    session-less MCP-only log slow: 20 000 same-top session-less records took
+    14s before this, well under a second after. A `deque` holds each stream's
+    entries in arrival order so the ones that have aged out of the window can
+    be popped off the left in O(1); a parallel `Counter` of tops still in the
+    window turns "does some earlier entry in the window share this top" into
+    an O(1) lookup instead of a scan. Each entry is pushed and popped at most
+    once, so the whole pass is O(n).
+    """
+    windows: dict[str | None, deque[tuple[float, str]]] = {}
+    top_counts: dict[str | None, Counter] = {}
+    repeated = 0
+    for r in searches:
+        try:
+            ts = _dt.datetime.fromisoformat(r["ts"]).timestamp()
+        except (KeyError, ValueError, TypeError, OSError):
+            # KeyError/ValueError: missing or unparseable `ts`. TypeError: a
+            # non-string `ts` (a hand-edited or malformed log line). OSError:
+            # `.timestamp()` on a naive pre-1970 datetime can raise on Windows.
+            # None of these can be matched against, so the record is skipped.
+            continue
+        top = r.get("top")
+        if top is None:
+            continue  # a null top can never match, so it is not worth tracking
+        stream = r.get("session")  # None is its own stream: every session-less record shares it
+        window = windows.setdefault(stream, deque())
+        counts = top_counts.setdefault(stream, Counter())
+        cutoff = ts - REPEAT_WINDOW_SECONDS
+        while window and window[0][0] < cutoff:
+            _, old_top = window.popleft()
+            counts[old_top] -= 1
+            if counts[old_top] <= 0:
+                del counts[old_top]
+        if counts.get(top, 0) > 0:
+            repeated += 1
+        window.append((ts, top))
+        counts[top] += 1
+    return repeated
+
+
 def summarise(records: list[dict]) -> dict:
     writes = [r for r in records if r.get("event") == "write"]
     rejects = [r for r in records if r.get("event") == "reject"]
@@ -89,6 +157,24 @@ def summarise(records: list[dict]) -> dict:
     unrecorded = len(searched - wrote)
     attributed = sum(1 for r in writes if r.get("session"))
 
+    # `via` shipped after `search`/`reject` did, so a log spanning its
+    # introduction mixes lines that carry it with lines that cannot. Reporting
+    # "unknown" only makes sense once something to contrast it with exists —
+    # an old log with no `via` anywhere should read as "nothing to report", not
+    # as "everything is unknown".
+    with_via = [r for r in searches if "via" in r]
+    if with_via:
+        via_counts = Counter(r.get("via", "unknown") for r in searches)
+        via_order = [k for k in ("cli", "mcp") if k in via_counts]
+        via_order += sorted(k for k in via_counts if k not in ("cli", "mcp", "unknown"))
+        if "unknown" in via_counts:
+            via_order.append("unknown")
+        searches_by_via = {k: via_counts[k] for k in via_order}
+    else:
+        searches_by_via = {}
+
+    repeated = _repeated_searches(searches)
+
     return {
         "span": [records[0]["ts"], records[-1]["ts"]] if records else [],
         "writes": len(writes),
@@ -115,6 +201,9 @@ def summarise(records: list[dict]) -> dict:
         "sessions": len(sessions),
         "sessions_unrecorded": unrecorded,
         "writes_per_session": round(attributed / len(sessions), 3) if sessions else 0.0,
+        "searches_by_via": searches_by_via,
+        "repeated_searches": repeated,
+        "repeated_rate": round(repeated / len(searches), 3) if searches else 0.0,
     }
 
 
@@ -147,8 +236,13 @@ def main(argv: list[str] | None = None, *, prog: str = "lore stats") -> int:
         print(f"warned    {sum(s['warn_codes'].values()):>5}   "
               f"({', '.join(f'{code}:{n}' for code, n in s['warn_codes'].items())})")
     print(f"searches  {s['searches']:>5}   ({s['zero_hit_rate']:.0%} returned nothing)")
+    if s["searches_by_via"]:
+        print(f"            via: {', '.join(f'{via} {n}' for via, n in s['searches_by_via'].items())}")
     for q in s["zero_hit_queries"]:
         print(f"            miss: {q}")
+    if s["searches"]:
+        print(f"repeated  {s['repeated_searches']:>5}   ({s['repeated_rate']:.0%} of searches "
+              f"re-returned a top page seen within the previous 2 minutes)")
     if s["touching_searches"]:
         print(f"touching  {s['touching_searches']:>5}   ({s['touching_measured']} measured, "
               f"{s['touching_misses']} found no page touching the path)")

@@ -14,6 +14,7 @@ import pytest
 
 import pagelore
 from pagelore import instructions, mcp, write
+from pagelore import lib as memory_lib
 
 BODY = ("## Cause\n\nThe renderer drops its context when the display sleeps, which is "
         "invisible from the code and cost a day to find; recorded so the next agent "
@@ -96,6 +97,16 @@ def test_search_finds_the_page_in_the_store_under_cwd(project):
     assert result["isError"] is False
     assert "display-sleep-context-loss" in text
     assert str(project / ".memory") in text
+
+
+def test_search_over_mcp_is_logged_with_via_mcp(project):
+    """The CLI and the MCP server share `search()`; the log's `via` field is the
+    only way `lore stats` can tell which route a query came in on."""
+    mcp.handle(call("memory_search", {"query": "display sleep context"}))
+    lines = (project / ".memory" / memory_lib.LOG_NAME).read_text().splitlines()
+    records = [json.loads(line) for line in lines if line.strip()]
+    searches = [r for r in records if r.get("event") == "search"]
+    assert searches[-1]["via"] == "mcp"
 
 
 def test_a_refused_write_is_an_error_with_a_fix_line(project):

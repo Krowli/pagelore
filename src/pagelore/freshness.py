@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import posixpath
 import subprocess
+import threading
 import unicodedata
 from pathlib import Path
 
@@ -109,32 +110,32 @@ def last_commits(root: Path, paths: list[str]) -> dict[str, int] | None:
     `locale.getpreferredencoding()` says at import time — on a non-UTF-8 locale
     (`cp1252`, still the Windows default in many installs) a raw UTF-8 path byte
     that `core.quotePath=false` now lets through unescaped can raise
-    `UnicodeDecodeError`, which is a `ValueError` and is *not* caught by
-    `except (OSError, subprocess.TimeoutExpired)` below — so it would crash
-    `lore search` / `lore show` outright instead of falling back to no markers.
-    Git's own output is UTF-8 regardless of the caller's locale, so decoding as
-    UTF-8 is always the right choice here; `errors="replace"` is the same
-    tolerance `lib.read_text` already applies to a page file with a stray bad
-    byte, for the same reason — one unreadable name should cost that one name,
-    not the whole call.
+    `UnicodeDecodeError` while iterating `proc.stdout` below. That is a
+    `ValueError`, which nothing here catches, so it would propagate straight out
+    of this function and crash `lore search` / `lore show` outright instead of
+    falling back to no markers. Git's own output is UTF-8 regardless of the
+    caller's locale, so decoding as UTF-8 is always the right choice here;
+    `errors="replace"` is the same tolerance `lib.read_text` already applies to a
+    page file with a stray bad byte, for the same reason — one unreadable name
+    should cost that one name, not the whole call.
 
     `%x00` is git's own escape for a NUL byte inside `--format`, spelled out as
     those literal characters — an actual NUL cannot survive as part of an argv
-    string. It cannot appear in a real commit message or filename, so splitting
-    the output on it can never mistake content for the boundary between commits.
+    string. It cannot appear in a real commit message or filename, so a NUL at
+    the start of a line can never be mistaken for content — it always marks the
+    start of the next commit's formatted line, never a filename.
+
+    History comes back newest-first, so once every path in `paths` has a
+    timestamp nothing further back in the log could still change the answer —
+    `subprocess.Popen` is used instead of `subprocess.run` so this function can
+    read `git log`'s stdout one line at a time and `terminate()` the process the
+    moment `remaining` empties out, rather than paying for git to walk (and print)
+    the rest of a history the answer no longer depends on. A path never committed
+    still needs the full walk — there is no earlier point at which "never" can be
+    known — so that case pays the old cost, same as before.
     """
     if not paths:
         return {}
-    try:
-        result = subprocess.run(
-            ["git", "-c", "core.quotePath=false", "-C", str(root), "log", "--relative",
-             "--format=%x00%ct", "--name-only", "--", *paths],
-            capture_output=True, encoding="utf-8", errors="replace",
-            timeout=GIT_TIMEOUT_SECONDS)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if result.returncode != 0:
-        return None  # not a repository, or none of this ever happened to commit
 
     # Two different callers can cite the same file under different spellings
     # (`src/a.py` and `./src/a.py` both normalise to one key) — every original
@@ -146,20 +147,69 @@ def last_commits(root: Path, paths: list[str]) -> dict[str, int] | None:
         by_match.setdefault(_matchable(p), []).append(p)
     remaining = set(by_match)
     out: dict[str, int] = {}
-    for chunk in result.stdout.split("\0"):
-        if not remaining:
-            break
-        ts_line, _, rest = chunk.partition("\n")
-        try:
-            ts = int(ts_line)
-        except ValueError:
-            continue  # the empty chunk before the first \0, or a stray line
-        for name in rest.splitlines():
-            key = _matchable(name)
+
+    try:
+        proc = subprocess.Popen(
+            ["git", "-c", "core.quotePath=false", "-C", str(root), "log", "--relative",
+             "--format=%x00%ct", "--name-only", "--", *paths],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    # A Timer, not the `timeout=` keyword `subprocess.run` offered: that keyword
+    # belongs to a call that blocks until the child exits, and this call must not
+    # block that long when the read loop below may already be done with `proc`
+    # well before then. The timer runs on its own thread and kills `proc` out from
+    # under the loop, which then simply sees end of file, the same as if git had
+    # exited on its own — `terminate`/`kill` only (no signals), so this works on
+    # Windows too.
+    timed_out = threading.Event()
+
+    def _kill_on_timeout() -> None:
+        timed_out.set()
+        proc.kill()  # matches what subprocess.run itself did on a TimeoutExpired
+
+    timer = threading.Timer(GIT_TIMEOUT_SECONDS, _kill_on_timeout)
+    timer.start()
+    found_all = False
+    try:
+        current_ts: int | None = None
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            if line[:1] == "\0":
+                # The whole of a commit's formatted line is `%x00%ct` — nothing
+                # else — so a leading NUL always starts a new commit and never a
+                # filename.
+                try:
+                    current_ts = int(line[1:])
+                except ValueError:
+                    current_ts = None  # defensive; git's own output is well-formed
+                continue
+            if not line or current_ts is None:
+                continue  # the blank separator line, or a name before any commit
+            key = _matchable(line)
             if key in remaining:
                 for spelling in by_match[key]:
-                    out[spelling] = ts
+                    out[spelling] = current_ts
                 remaining.discard(key)
+                if not remaining:
+                    # Every path already has an answer — let git go rather than
+                    # pay for the rest of the walk.
+                    found_all = True
+                    proc.terminate()
+                    break
+    finally:
+        timer.cancel()
+        proc.stdout.close()
+        proc.wait()  # reap the child either way — never leave a zombie behind
+
+    if timed_out.is_set():
+        return None
+    if found_all:
+        return out
+    if proc.returncode != 0:
+        return None  # not a repository, or none of this ever happened to commit
     return out
 
 

@@ -89,7 +89,9 @@ lore stats [--store STORE] [--since SINCE] [--json]
 ```
 
 What the store has been doing, from its log: writes (new, merged, unchanged,
-median size), refusals, searches and the ones that returned nothing,
+median size), refusals, searches and the ones that returned nothing, which
+route each search came in on, how often a search re-returned a top page
+another search had already returned within the last two minutes,
 `--touching` searches and the ones whose path found no page, sessions that
 searched and never wrote. `--since` takes an ISO date, e.g. `2026-08-09`.
 
@@ -98,13 +100,28 @@ were run after the `touched` field existed to measure them (`measured`), not
 against the total — a log spanning the field's introduction otherwise reads as
 a much lower miss rate than the measurable slice actually had.
 
+The `via` line under `searches` only appears once some record in the log
+carries the field (it shipped after `search` itself did); a record from before
+that counts as `unknown` rather than being left out. `repeated` counts a
+search as a repeat when an earlier search within the last two minutes got back
+the same top page — an agent re-searching with a paraphrase instead of
+trusting the first answer, which is the pattern this number exists to
+surface. Searches are grouped by session for this, except that every search
+with no session at all shares one group instead of being left out: records
+without a session — older logs, and clients that do not pass a session id, as
+seen in a real log — are grouped as one stream, and that turned out to be
+exactly where the real repeats were. Two searches in different, named
+sessions never count against each other.
+
 ```
 2026-08-17T18:31:03 … 2026-09-16T23:35:03
 
 writes       24   (19 new, 5 merged, 0 unchanged, median 1536 chars)
 refused       0   (0% of write attempts)
 searches     41   (7% returned nothing)
+            via: cli 38, mcp 3
             miss: terminal pane rendering Zenith Tauri
+repeated      6   (15% of searches re-returned a top page seen within the previous 2 minutes)
 touching      47   (3 measured, 1 found no page touching the path)
             miss: src/legacy/pty-pool.ts
 sessions      1   (0 searched and never wrote, 4.00 writes per session)
@@ -335,8 +352,20 @@ so it stays out of commits under every store mode — it holds every query anyon
 typed. A search that passed `--touching` also logs `touched`: how many of the
 returned hits were pages whose `sources` named one of those paths, so a search
 that found nothing touching the path is distinguishable from one that never had
-a touching page to find. `lore stats` reads it: a refusal rate concentrated on
-one code usually means a rule is wrong rather than the writer; searches that
-return nothing point at a hole in the corpus or in ranking; `--touching`
-searches that found no page point at a source no page cites yet; sessions that
-searched and never wrote are the write side's "did it happen".
+a touching page to find. Every search also logs `via`: `"cli"` when it ran
+through the command, `"mcp"` through `lore mcp` — the two routes call the same
+`search()`, so this is the only way to tell which one a line came from.
+`lore stats` reads it: a refusal rate concentrated on one code usually means a
+rule is wrong rather than the writer; searches that return nothing point at a
+hole in the corpus or in ranking; a search re-returning, within two minutes, a
+top page an earlier search already returned points at an agent re-asking
+instead of trusting the first answer — records without a session (older logs,
+and clients that do not pass a session id, as seen in a real log) are grouped
+as one stream, since that is where the pattern actually turned up;
+`--touching` searches that found no page point at a source no page cites yet;
+sessions that searched and never wrote are the write side's "did it happen".
+
+Set `PAGELORE_NO_LOG` (any non-empty value) to turn logging off entirely —
+`log_event` then writes nothing. Meant for measurement runs (`evals/speed.py`
+sets it on every process it spawns), not for normal use: a store you point a
+benchmark at should not end up with benchmark queries in its log.

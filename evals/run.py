@@ -106,7 +106,7 @@ def bootstrap_ci(values: list[float]) -> tuple[float, float]:
     return (means[int(0.025 * BOOTSTRAP)], means[int(0.975 * BOOTSTRAP) - 1])
 
 
-def evaluate(method, corpus, store, queries) -> dict:
+def evaluate(method, corpus, store, queries, *, return_ndcg: bool = False) -> dict:
     per_query = {"ndcg": [], "mrr": [], "r1": [], "r3": []}
     by_type: dict[str, list[float]] = {}
     for item in queries:
@@ -120,7 +120,7 @@ def evaluate(method, corpus, store, queries) -> dict:
         by_type.setdefault(item.get("type", "other"), []).append(n)
 
     low, high = bootstrap_ci(per_query["ndcg"])
-    return {
+    result = {
         "ndcg@10": statistics.fmean(per_query["ndcg"]),
         "ci": [low, high],
         "mrr@10": statistics.fmean(per_query["mrr"]),
@@ -129,6 +129,14 @@ def evaluate(method, corpus, store, queries) -> dict:
         "by_type": {k: statistics.fmean(v) for k, v in sorted(by_type.items())},
         "n": len(queries),
     }
+    if return_ndcg:
+        # `compute()` builds the `_deltas` paired bootstrap from this instead of
+        # running every method over `known` a second time, which used to double
+        # the cost of the scan methods (no index, ~28 ms/query) for no new
+        # information. Not part of the return value otherwise, so every existing
+        # caller and the printed/JSON output are unchanged.
+        result["_ndcg_values"] = per_query["ndcg"]
+    return result
 
 
 def paired_delta(a: list[float], b: list[float]) -> tuple[float, float, float]:
@@ -190,12 +198,17 @@ def evaluate_unanswerable(method, corpus, store, queries) -> dict:
             "n": len(queries)}
 
 
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--json", action="store_true")
-    ap.add_argument("--by-type", action="store_true")
-    args = ap.parse_args(argv)
+def compute(methods: dict | None = None) -> dict:
+    """Run the full evaluation and return the same dict `--json` prints.
 
+    `methods` restricts the main comparison table (default: every entry in
+    `METHODS`) — the two shipped rows are enough for the CI gate in
+    `tests/test_evals_baseline.py`, and skipping the rest is most of the cost
+    of a full run. `_touching` always runs both `TOUCHING_METHODS`: it is
+    already just the two, and the baseline needs its shipped row regardless
+    of which `methods` were asked for.
+    """
+    methods = METHODS if methods is None else methods
     data = load_corpus()
     corpus = data["pages"]
     known = data["known_item"]
@@ -207,11 +220,11 @@ def main(argv=None) -> int:
         store = materialise(corpus, Path(tmp))
         results = {}
         per_query = {}
-        for name, method in METHODS.items():
-            per_query[name] = [ndcg_at(method(q["q"], corpus, store), set(q["relevant"]))
-                               for q in known]
+        for name, method in methods.items():
+            known_item = evaluate(method, corpus, store, known, return_ndcg=True)
+            per_query[name] = known_item.pop("_ndcg_values")
             results[name] = {
-                "known_item": evaluate(method, corpus, store, known),
+                "known_item": known_item,
                 "ambiguous": evaluate(method, corpus, store, ambiguous),
                 "unanswerable": evaluate_unanswerable(method, corpus, store, unanswerable),
             }
@@ -219,7 +232,7 @@ def main(argv=None) -> int:
         results["_deltas"] = {
             other: dict(zip(("mean", "low", "high"),
                             paired_delta(per_query[shipped], per_query[other])))
-            for other in METHODS if other != shipped
+            for other in methods if other != shipped and shipped in per_query
         }
         results["_calibration"] = calibration(corpus, store, known, unanswerable)
         # The file the agent is editing, given as words and given as a path. The
@@ -237,6 +250,21 @@ def main(argv=None) -> int:
                                            touch_per_query["path as text query"])))
             if touching else {},
         }
+    return results
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--by-type", action="store_true")
+    args = ap.parse_args(argv)
+
+    data = load_corpus()
+    corpus = data["pages"]
+    known = data["known_item"]
+    ambiguous = data["ambiguous"]
+    unanswerable = data["unanswerable"]
+    results = compute()
 
     if args.json:
         print(json.dumps(results, indent=2, ensure_ascii=False))

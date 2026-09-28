@@ -15,6 +15,8 @@ lore search "your query"
 
 Open a full page with `lore show <slug>`. A hit marked `⚠ superseded by <slug>` was replaced — read the replacement first. Add `--touching <path>` to put the pages written against a file you are about to change first. If nothing relevant comes back, say so rather than guessing.
 
+Put every word you would try — synonyms, the component, the symptom — into one query: the words are OR'd and ranked, so one broad query finds what several narrow ones would. Before changing a file, pass its path as `touching`, so the pages written against that file come first.
+
 The trigger is the kind of claim you are about to make, not the wording of the question; "how does X work" and "what do you know about this project" are memory questions too.
 
 This file is not a substitute for the search — it carries instructions rather than reasons, and it goes stale while a page stays dated and sourced.

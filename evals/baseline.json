@@ -1,0 +1,70 @@
+{
+  "_generated": {
+    "date": "2026-09-28",
+    "command": "python3 evals/run.py --json  (bootstrap seed 20260817, evals/corpus.json unchanged)",
+    "note": "Read by tests/test_evals_baseline.py, which fails a PR that regresses any number here by more than 0.005 (the opposite direction for unanswerable_answered_anyway, where lower is better). Update this file deliberately, in the same PR that improves ranking, by re-running the command above and copying the numbers in — never to make a failing gate pass without knowing why it moved. See evals/README.md."
+  },
+  "fts5": {
+    "_measured_as": "the two --json runs above, with sqlite3 FTS5 available and PAGELORE_NO_FTS5 unset — the normal case on every CI runner and most dev machines.",
+    "shipped (fts5 index)": {
+      "known_item": {
+        "ndcg@10": 0.6485674287062688,
+        "mrr@10": 0.5938139329805997,
+        "recall@1": 0.4888888888888889,
+        "recall@3": 0.6518518518518519,
+        "by_type": {
+          "keywords": 0.7920809867135519,
+          "paraphrase": 0.531530411216591,
+          "prose": 0.6220908881886633
+        }
+      },
+      "ambiguous_ndcg@10": 0.4620563611374953,
+      "unanswerable_answered_anyway": 1.0
+    },
+    "shipped fallback (scan)": {
+      "known_item": {
+        "ndcg@10": 0.6441703159091609,
+        "mrr@10": 0.5915388007054674,
+        "recall@1": 0.4888888888888889,
+        "recall@3": 0.6555555555555556,
+        "by_type": {
+          "keywords": 0.7957645366052528,
+          "paraphrase": 0.5335060616201888,
+          "prose": 0.603240349502041
+        }
+      },
+      "ambiguous_ndcg@10": 0.4701651058327025,
+      "unanswerable_answered_anyway": 1.0
+    },
+    "touching_shipped": {
+      "ndcg@10": 0.5453481819096128,
+      "mrr@10": 0.5206587301587302,
+      "recall@1": 0.38,
+      "recall@3": 0.58
+    }
+  },
+  "scan": {
+    "_measured_as": "the same two --json runs, re-run with PAGELORE_NO_FTS5=1 — what tests/test_evals_baseline.py and evals/run.py fall back to whenever sqlite3 has no FTS5, or the fallback pytest job sets the variable on purpose. Under this variable 'shipped (fts5 index)' and 'shipped fallback (scan)' call the identical code path (see methods.py), so they score identically and only one set of numbers is kept here; the gate test compares BOTH live method names against this one baseline when running in this mode.",
+    "shipped fallback (scan)": {
+      "known_item": {
+        "ndcg@10": 0.6441703159091609,
+        "mrr@10": 0.5915388007054674,
+        "recall@1": 0.4888888888888889,
+        "recall@3": 0.6555555555555556,
+        "by_type": {
+          "keywords": 0.7957645366052528,
+          "paraphrase": 0.5335060616201888,
+          "prose": 0.603240349502041
+        }
+      },
+      "ambiguous_ndcg@10": 0.4701651058327025,
+      "unanswerable_answered_anyway": 1.0
+    },
+    "touching_shipped": {
+      "ndcg@10": 0.5453481819096128,
+      "mrr@10": 0.5206587301587302,
+      "recall@1": 0.38,
+      "recall@3": 0.58
+    }
+  }
+}

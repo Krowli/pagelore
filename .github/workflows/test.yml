@@ -168,6 +168,63 @@ jobs:
                         '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | lore mcp > out.jsonl
           python -c "import json,sys; ls=[json.loads(l) for l in open('out.jsonl') if l.strip()]; \
             assert len(ls)==2, ls; assert {t['name'] for t in ls[1]['result']['tools']}=={'memory_search','memory_write'}, ls"
+
+          # The round trip through tools/call: a valid write lands a real page,
+          # a search finds it back, and a credential-shaped body is refused with
+          # the same FIX: line the CLI prints — the write gate is one gate, not
+          # one per transport. The fake AWS key is built from two halves so no
+          # single literal in this file reads as a real credential to a scanner.
+          mkdir -p src && printf 'export {}\n' > src/mcp-probe.ts
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          def rpc(proc, mid, method, params):
+              proc.stdin.write(json.dumps(
+                  {"jsonrpc": "2.0", "id": mid, "method": method, "params": params}) + "\n")
+              proc.stdin.flush()
+              line = proc.stdout.readline()
+              assert line, f"lore mcp produced no reply to {method}"
+              return json.loads(line)
+
+          body = ("Recorded by the MCP round-trip check in CI, so memory_search below has "
+                  "something real to find: memory_write reaches the same write gate the "
+                  "CLI uses, with the same refusal codes and FIX lines, over JSON-RPC "
+                  "instead of argv, and this line pads the body past the two-hundred-"
+                  "character floor the gate applies.")
+          assert len(body) >= 200, len(body)
+
+          proc = subprocess.Popen(["lore", "mcp"], stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE, text=True, bufsize=1)
+          try:
+              written = rpc(proc, 10, "tools/call", {
+                  "name": "memory_write",
+                  "arguments": {"slug": "mcp-probe", "title": "MCP write round trip",
+                               "kind": "bug", "sources": ["src/mcp-probe.ts"], "body": body}})
+              assert written["result"]["isError"] is False, written
+              assert Path(".memory/mcp-probe.md").exists(), "memory_write wrote no page file"
+
+              found = rpc(proc, 11, "tools/call",
+                         {"name": "memory_search", "arguments": {"query": "mcp-probe"}})
+              text = found["result"]["content"][0]["text"]
+              assert "mcp-probe" in text, text
+
+              half_a, half_b = "AKIA1234ABC", "D5678EFGH"  # halves of a fake, well-formed key
+              refused = rpc(proc, 12, "tools/call", {
+                  "name": "memory_write",
+                  "arguments": {"slug": "mcp-secret-probe", "title": "Should be refused",
+                               "kind": "bug", "sources": ["src/mcp-probe.ts"],
+                               "body": f"credential: {half_a + half_b}\n" + body}})
+              assert refused["result"]["isError"] is True, refused
+              refused_text = refused["result"]["content"][0]["text"]
+              assert "FIX:" in refused_text, refused_text
+              assert not Path(".memory/mcp-secret-probe.md").exists()
+          finally:
+              proc.stdin.close()
+              proc.wait(timeout=10)
+          PY
+
           lore init --scope project --agent claude --via mcp --yes
           grep -q '"pagelore"' .mcp.json
           lore doctor --json > doctor.json
@@ -193,6 +250,48 @@ jobs:
           if lore nonsense 2>/dev/null; then
             echo "::error::an unknown command exited 0"; exit 1
           fi
+
+  speed-gate:
+    name: speed gate (1000 pages, ubuntu)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - name: Install the wheel as a user would
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip pipx
+          python -m pipx install --force dist/*.whl
+          python -m pipx ensurepath
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # `evals/speed.py` spawns whatever `lore` the PATH resolves (see its own
+      # `entry_point()`), so this measures the wheel just installed above, not
+      # this checkout's `src/` run through `python -m`. PAGELORE_NO_LOG is set so
+      # this speed run does not write real query lines into a store nobody reads.
+      - name: 1000-page warm search must stay under the 1000 ms budget
+        env:
+          PAGELORE_NO_LOG: "1"
+        run: |
+          set -euo pipefail
+          python evals/speed.py --pages 1000 | tee speed.txt
+          python - <<'PY'
+          import re
+          text = open("speed.txt").read()
+          m = re.search(r"^\s*1000\s+(\d+)\s*ms", text, re.M)
+          assert m, f"could not find the 1000-page warm number in:\n{text}"
+          warm = int(m.group(1))
+          budget = 1000
+          print(f"warm (index) search at 1000 pages: {warm} ms (budget {budget} ms)")
+          assert warm < budget, f"warm search took {warm} ms, over the {budget} ms budget"
+          PY
 
   npm-pack:
     name: the npm tarball carries the same program (${{ matrix.os }})

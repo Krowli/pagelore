@@ -6,6 +6,52 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`lore stats` reports which route each search came in on, and repeated
+  searches.** The log's `search` events now carry `via` (`"cli"` or `"mcp"`);
+  `lore stats` prints a breakdown when any record has it, and treats older
+  records without the field as `unknown` rather than miscounting them.
+  `lore stats` also reports `repeated`: a search that re-returned, within two
+  minutes, the same top page an earlier search in the same session had already
+  returned — records without a session (older logs, and clients that do not
+  pass a session id, as seen in a real log) are grouped as one stream — the
+  paraphrase-and-reask pattern real logs showed.
+- **`PAGELORE_NO_LOG` turns logging off entirely.** Any non-empty value makes
+  `log_event` a no-op. `evals/speed.py` sets it on every process it spawns, so
+  a benchmark run never lands in a real project's log.
+- **CI gates retrieval quality, speed, the MCP round trip and documented
+  examples.** `tests/test_evals_baseline.py` runs the shipped ranker in-process
+  against `evals/baseline.json` and fails a PR that regresses nDCG@10, MRR@10,
+  recall, or the unanswerable-query false-confidence rate by more than 0.005, in
+  both FTS5-index and no-FTS5 (scan) mode. A new `speed-gate` job fails if a warm
+  search over 1000 pages exceeds 1000 ms. `install-smoke`'s MCP step now drives a
+  full `tools/call` round trip — `memory_write`, `memory_search`, and a
+  credential-shaped write that must be refused. `tests/test_docs_examples.py`
+  parses every documented `lore …` command against the real CLI parsers so a
+  renamed or removed flag breaks the build instead of the docs.
+- **A measurement of how a real Claude Code agent uses the memory.**
+  `evals/agent_eval.py` runs `claude -p` against a throwaway project per model ×
+  connection (instruction file or MCP) × task and scores each session: whether and
+  how often it searched, repeats, `--touching`, search before the first edit,
+  bypassing the search through `.memory`, page written, correct or abstained
+  answers, turns and cost. A manual GitHub workflow runs it with an
+  `ANTHROPIC_API_KEY` secret.
+
+### Changed
+
+- **Agent instructions: every word in one query.** The block and the MCP
+  `memory_search` description now ask for synonyms, the component and the symptom
+  in one query, and the MCP instructions ask for the file's path as `touching`
+  before changing it. Measured on Claude Code: baseline and v1 on Opus 5.5 and
+  Sonnet 5 (240 sessions each); the shipped v2 on the Sonnet 5 cells v1 moved
+  (80 sessions) (see docs/measurements.md); a first version that also said "do
+  not reword" was measured to hurt and was not shipped.
+- **The `⚠ source changed` / `⚠ source gone` check is faster on a long history.**
+  `git log` is now read incrementally and stopped as soon as every cited source
+  has an answer, instead of always walking the full log. `lore show` also reads
+  the store once instead of twice.
+
 ## [0.8.2] - 2026-09-27
 
 ### Fixed

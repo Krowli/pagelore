@@ -132,6 +132,30 @@ def test_search_with_no_hits_is_still_logged(repo):
     assert e["top"] is None
 
 
+def test_search_logs_via_cli_by_default(repo):
+    """`search()` is called directly by the CLI and by evals; both must keep
+    logging as "cli" with no caller change, which is what the default gives."""
+    memory_search.search("kubernetes", repo / ".memory")
+    e = entries(repo)[-1]
+    assert e["via"] == "cli"
+
+
+def test_search_logs_via_mcp_when_asked(repo):
+    memory_search.search("kubernetes", repo / ".memory", via="mcp")
+    e = entries(repo)[-1]
+    assert e["via"] == "mcp"
+
+
+def test_pagelore_no_log_disables_the_log(repo, monkeypatch):
+    """A measurement run (evals/speed.py) sets this so benchmarking never writes
+    into a real project's log."""
+    monkeypatch.setenv(memory_lib.NO_LOG_ENV, "1")
+    write(repo, "--slug", "quiet-write", "--title", "T", "--kind", "bug",
+          "--source", "src/real.ts")
+    memory_search.search("kubernetes", repo / ".memory")
+    assert entries(repo) == []
+
+
 def test_logging_never_breaks_the_operation(repo, monkeypatch):
     """A log that can take the tool down with it is worse than no log.
 

@@ -22,6 +22,9 @@ LEGACY_ENV_PREFIX = "PROJECT_MEMORY_"
 _warned_env: set[str] = set()
 STORE_DIRNAME = ".memory"
 LOG_NAME = ".log.jsonl"
+# Set by evals/speed.py for the processes it spawns, so a benchmark run never
+# appends to a real project's log — a measurement is not a search an agent asked.
+NO_LOG_ENV = "PAGELORE_NO_LOG"
 # One O_APPEND write is atomic against other processes on POSIX, and is not on
 # Windows, where 17 of 200 concurrent lines went missing. This serialises the
 # threads inside one process; O_APPEND still covers the cross-process case.
@@ -625,6 +628,8 @@ def log_event(store: Path, event: str, *, create: bool = False, **fields) -> Non
     first exploratory query in a repository that never opted in, which is a
     read-only operation dirtying a working tree.
     """
+    if env(NO_LOG_ENV):
+        return
     try:
         if create:
             ensure_store(store)
