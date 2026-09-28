@@ -779,7 +779,8 @@ def check_lore(env: dict) -> str:
     """The `lore` a session will run, or SystemExit naming what is wrong."""
     found = shutil.which("lore", path=env["PATH"])
     proc = subprocess.run([found or "lore", "--version"], capture_output=True, text=True,
-                          env=env, timeout=60) if found else None
+                          encoding="utf-8", errors="replace", env=env,
+                          timeout=60) if found else None
     line = proc.stdout.strip() if proc else ""
     if not line.startswith(f"pagelore {__version__} ") or str(REPO / "src" / "pagelore") not in line:
         raise SystemExit(f"FIX: `lore --version` in the session says {line or 'nothing'!r}, "
@@ -932,6 +933,14 @@ def main(argv=None) -> int:
         print(f"FIX: {out} already holds results. Pass --append to add to it, or a new "
               "--out — two runs merged by accident read as one.", file=sys.stderr)
         return 2
+    if sys.platform == "win32":
+        # The `lore` put in front of the agent is a sh script, and nothing here has
+        # been run against claude on Windows. `--summarize` above works anywhere.
+        print("FIX: sessions and --dry-run run on macOS or Linux only — the `lore` "
+              "shim the agent calls is a POSIX shell script. Run this under WSL, or on "
+              "the ubuntu-latest CI workflow (.github/workflows/agent-eval.yml).",
+              file=sys.stderr)
+        return 2
 
     root = Path(tempfile.mkdtemp(prefix="pm-agent-eval-"))
     env = child_env(root / "bin", root / "home")
@@ -947,7 +956,8 @@ def main(argv=None) -> int:
                   file=sys.stderr)
             return 2
         claude_version = subprocess.run([claude, "--version"], capture_output=True,
-                                        text=True, env=env, stdin=subprocess.DEVNULL,
+                                        text=True, encoding="utf-8", errors="replace",
+                                        env=env, stdin=subprocess.DEVNULL,
                                         timeout=60).stdout.strip()
         out.parent.mkdir(parents=True, exist_ok=True)
         with out.open("a", encoding="utf-8") as fh:

@@ -6,6 +6,7 @@ session is *scored* is pure and checked here, so a mis-scored run is a failing t
 rather than a number nobody questions.
 """
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -480,6 +481,12 @@ def test_every_graded_phrase_is_a_fact_of_its_page():
 
 # --- projects ------------------------------------------------------------------
 
+POSIX_ONLY = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the harness refuses to build sessions on Windows: the `lore` shim it puts on "
+           "the agent's PATH is a POSIX shell script")
+
+
 def dry_run(tmp_path, monkeypatch, capsys, *extra):
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     assert ae.main(["--dry-run", "--arms", "include,mcp", "--tasks", "C", *extra]) == 0
@@ -498,6 +505,7 @@ def flag(cmd, name):
     return cmd[cmd.index(name) + 1]
 
 
+@POSIX_ONLY
 def test_dry_run_builds_the_include_project(tmp_path, monkeypatch, capsys):
     out, s = dry_run(tmp_path, monkeypatch, capsys)
     assert f"pagelore {ae.__version__}" in out
@@ -519,6 +527,7 @@ def test_dry_run_builds_the_include_project(tmp_path, monkeypatch, capsys):
     assert "--model" not in cmd
 
 
+@POSIX_ONLY
 def test_dry_run_builds_the_mcp_project_with_a_working_server(tmp_path, monkeypatch, capsys):
     _, s = dry_run(tmp_path, monkeypatch, capsys, "--models", "claude-x")
     project, cmd = s["mcp"], s["mcp:cmd"]
@@ -539,7 +548,7 @@ def test_dry_run_builds_the_mcp_project_with_a_working_server(tmp_path, monkeypa
     ]
     proc = subprocess.run([entry["command"], *entry["args"]], cwd=project,
                           input="".join(json.dumps(r) + "\n" for r in requests),
-                          capture_output=True, text=True, timeout=60,
+                          capture_output=True, text=True, encoding="utf-8", timeout=60,
                           env={**ae.child_env(tmp_path / "bin", tmp_path / "home"),
                                **entry["env"]})
     replies = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
@@ -557,12 +566,14 @@ def test_child_env_strips_the_parent_session_and_pagelore_overrides(monkeypatch,
     assert not [k for k in env if k == "CLAUDECODE" or (k.startswith("CLAUDE_CODE_")
                 and k != "CLAUDE_CODE_OAUTH_TOKEN")]
     assert "PAGELORE_NO_LOG" not in env
-    assert env["PATH"].split(":")[0] == str(tmp_path / "bin")
+    assert env["PATH"].split(os.pathsep)[0] == str(tmp_path / "bin")
     assert env["PAGELORE_HOME"] == str(tmp_path / "home")
 
 
 def test_tidy_auto_memory_removes_only_its_own_empty_directory(tmp_path, monkeypatch):
+    # Path.home() reads HOME on POSIX and USERPROFILE on Windows
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     projects = tmp_path / ".claude" / "projects"
     empty = projects / "-T-pm-agent-eval-abc-include-A-0-project"
     used = projects / "-T-pm-agent-eval-abc-mcp-A-0-project"
@@ -589,7 +600,6 @@ def test_an_existing_results_file_is_not_merged_into_without_append(tmp_path, ca
 
 @pytest.mark.skipif(sys.platform == "win32", reason="process groups are POSIX here")
 def test_a_timeout_kills_the_whole_process_tree(tmp_path):
-    import os
     import time
     pidfile = tmp_path / "pid"
     started = time.perf_counter()
@@ -647,3 +657,9 @@ def test_summarize_is_quiet_when_the_stored_metrics_agree(tmp_path, capsys):
     path.write_text(json.dumps(row) + "\n", encoding="utf-8")
     assert ae.main(["--summarize", str(path)]) == 0
     assert "re-scored" not in capsys.readouterr().out
+
+
+def test_sessions_are_refused_on_windows(monkeypatch, capsys):
+    monkeypatch.setattr(ae.sys, "platform", "win32")
+    assert ae.main(["--dry-run", "--tasks", "A"]) == 2
+    assert "POSIX" in capsys.readouterr().err
