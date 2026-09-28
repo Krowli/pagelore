@@ -39,6 +39,12 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Agent instructions: every word in one query.** The block and the MCP
+  `memory_search` description now ask for synonyms, the component and the symptom
+  in one query, and the MCP instructions ask for the file's path as `touching`
+  before changing it. Measured on Claude Code with Opus 5.5 and Sonnet 5 (see
+  docs/measurements.md); a first version that also said "do not reword" was
+  measured to hurt and was not shipped.
 - **The `⚠ source changed` / `⚠ source gone` check is faster on a long history.**
   `git log` is now read incrementally and stopped as soon as every cited source
   has an answer, instead of always walking the full log. `lore show` also reads
