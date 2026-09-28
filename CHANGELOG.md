@@ -6,6 +6,20 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`lore stats` reports which route each search came in on, and repeated
+  searches.** The log's `search` events now carry `via` (`"cli"` or `"mcp"`);
+  `lore stats` prints a breakdown when any record has it, and treats older
+  records without the field as `unknown` rather than miscounting them.
+  `lore stats` also reports `repeated`: a search in the same session that
+  re-returned, within two minutes, the same top page an earlier search in that
+  session had already returned — the paraphrase-and-reask pattern real logs
+  showed.
+- **`PAGELORE_NO_LOG` turns logging off entirely.** Any non-empty value makes
+  `log_event` a no-op. `evals/speed.py` sets it on every process it spawns, so
+  a benchmark run never lands in a real project's log.
+
 ## [0.8.2] - 2026-09-27
 
 ### Fixed

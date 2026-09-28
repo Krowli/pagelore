@@ -366,7 +366,11 @@ def _from_scan(query: str, store: Path, k: int,
 
 
 def search(query: str, store: Path, k: int = 10,
-           touching: list[str] | None = None) -> list[tuple[float, Page]]:
+           touching: list[str] | None = None, via: str = "cli") -> list[tuple[float, Page]]:
+    """`via` names the route a query came in on ("cli" or "mcp") and is only
+    stamped into the log line — it changes no ranking. Defaults to "cli" so the
+    command's own `main` and the ~400 calls evals make need no change; `mcp.py`
+    passes "mcp" explicitly."""
     global last_path, last_touching, last_skipped
     last_touching = {}
     last_skipped = []
@@ -396,6 +400,7 @@ def search(query: str, store: Path, k: int = 10,
     # agent ever saw them.
     log_event(store, "search", query=query, hits=len(hits),
               top=hits[0][1].slug if hits else None,
+              via=via,
               **({"touching": paths,
                   "touched": sum(1 for _, p in hits if p.slug in last_touching)}
                  if paths else {}),

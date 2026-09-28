@@ -1,11 +1,21 @@
 """memory_stats reads the log back. Without it the log is write-only, which is
 the same failure the write gate exists to avoid."""
+import datetime as _dt
 import json
+import time
 
 import pytest
 
 from pagelore import lib as memory_lib
 from pagelore import stats as memory_stats
+
+
+def append_raw(store, records):
+    """Write log lines with an explicit `ts`, bypassing `log_event`'s own clock —
+    needed to control the timing `repeated_searches` measures."""
+    with (store / memory_lib.LOG_NAME).open("a", encoding="utf-8") as fh:
+        for rec in records:
+            fh.write(json.dumps(rec) + "\n")
 
 
 @pytest.fixture()
@@ -244,3 +254,189 @@ def test_sessions_are_printed(sessions, capsys):
     memory_stats.main(["--store", str(sessions)])
     out = capsys.readouterr().out
     assert "sessions" in out and "never wrote" in out
+
+
+def test_searches_by_via_counts_and_labels_missing_as_unknown(tmp_path):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    for event in [
+        {"event": "search", "query": "a", "hits": 1, "top": "x", "via": "cli"},
+        {"event": "search", "query": "b", "hits": 1, "top": "y", "via": "cli"},
+        {"event": "search", "query": "c", "hits": 1, "top": "z", "via": "mcp"},
+        {"event": "search", "query": "d", "hits": 0, "top": None},
+    ]:
+        memory_lib.log_event(store, event.pop("event"), **event)
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["searches_by_via"] == {"cli": 2, "mcp": 1, "unknown": 1}
+
+
+def test_searches_by_via_is_empty_when_no_record_has_via(logged):
+    """The `logged` fixture predates the `via` field entirely — it must not be
+    read as "everything unknown", just as "nothing to report"."""
+    s = memory_stats.summarise(memory_stats.read_log(logged, None))
+    assert s["searches_by_via"] == {}
+
+
+def test_via_line_is_printed_only_when_any_record_has_via(tmp_path, capsys):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    memory_lib.log_event(store, "search", query="a", hits=1, top="x", via="cli")
+    memory_stats.main(["--store", str(store)])
+    assert "via: cli 1" in capsys.readouterr().out
+
+
+def test_via_line_is_absent_without_any_via(logged, capsys):
+    memory_stats.main(["--store", str(logged)])
+    assert "via:" not in capsys.readouterr().out
+
+
+def test_repeat_within_session_and_window_is_counted(tmp_path):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    base = _dt.datetime(2026, 1, 1, 12, 0, 0)
+    append_raw(store, [
+        {"ts": base.isoformat(timespec="seconds"), "event": "search", "query": "q1",
+         "hits": 1, "top": "a", "session": "s1"},
+        {"ts": (base + _dt.timedelta(seconds=60)).isoformat(timespec="seconds"),
+         "event": "search", "query": "q1 again", "hits": 1, "top": "a", "session": "s1"},
+    ])
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["repeated_searches"] == 1
+    assert s["repeated_rate"] == 0.5
+
+
+def test_repeat_past_the_window_is_not_counted(tmp_path):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    base = _dt.datetime(2026, 1, 1, 12, 0, 0)
+    append_raw(store, [
+        {"ts": base.isoformat(timespec="seconds"), "event": "search", "query": "q1",
+         "hits": 1, "top": "a", "session": "s1"},
+        {"ts": (base + _dt.timedelta(seconds=121)).isoformat(timespec="seconds"),
+         "event": "search", "query": "q1 again", "hits": 1, "top": "a", "session": "s1"},
+    ])
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["repeated_searches"] == 0
+
+
+def test_repeat_across_different_sessions_is_not_counted(tmp_path):
+    """Two different (session-stamped) sessions interleaved on the same top page
+    must not count against each other — only session-less records share a
+    stream; two real, distinct sessions never do."""
+    store = tmp_path / ".memory"
+    store.mkdir()
+    base = _dt.datetime(2026, 1, 1, 12, 0, 0)
+    append_raw(store, [
+        {"ts": base.isoformat(timespec="seconds"), "event": "search", "query": "q1",
+         "hits": 1, "top": "a", "session": "s1"},
+        {"ts": (base + _dt.timedelta(seconds=10)).isoformat(timespec="seconds"),
+         "event": "search", "query": "q1 again", "hits": 1, "top": "a", "session": "s2"},
+    ])
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["repeated_searches"] == 0
+
+
+def test_repeat_needs_a_non_null_top(tmp_path):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    base = _dt.datetime(2026, 1, 1, 12, 0, 0)
+    append_raw(store, [
+        {"ts": base.isoformat(timespec="seconds"), "event": "search", "query": "q1",
+         "hits": 0, "top": None, "session": "s1"},
+        {"ts": (base + _dt.timedelta(seconds=10)).isoformat(timespec="seconds"),
+         "event": "search", "query": "q1 again", "hits": 0, "top": None, "session": "s1"},
+    ])
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["repeated_searches"] == 0
+
+
+def test_session_less_burst_with_same_top_counts_as_repeats(tmp_path):
+    """`lore mcp` runs as a long-lived server process that never sees the
+    harness's session env var, so every MCP search is session-less — and a real
+    log showed exactly this stream carrying the paraphrase-and-reask pattern.
+    Session-less records are grouped into one shared stream instead of being
+    skipped, so a burst of rewordings there is caught the same way a
+    session-stamped one is."""
+    store = tmp_path / ".memory"
+    store.mkdir()
+    base = _dt.datetime(2026, 1, 1, 12, 0, 0)
+    append_raw(store, [
+        {"ts": base.isoformat(timespec="seconds"), "event": "search", "query": "q1",
+         "hits": 1, "top": "a"},
+        {"ts": (base + _dt.timedelta(seconds=30)).isoformat(timespec="seconds"),
+         "event": "search", "query": "q1 reworded", "hits": 1, "top": "a"},
+        {"ts": (base + _dt.timedelta(seconds=60)).isoformat(timespec="seconds"),
+         "event": "search", "query": "q1 reworded again", "hits": 1, "top": "a"},
+    ])
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["repeated_searches"] == 2
+
+
+def test_session_less_searches_far_apart_are_not_repeats(tmp_path):
+    """The shared session-less stream still respects the 120s window — being
+    grouped together is not the same as being unconditionally counted."""
+    store = tmp_path / ".memory"
+    store.mkdir()
+    base = _dt.datetime(2026, 1, 1, 12, 0, 0)
+    append_raw(store, [
+        {"ts": base.isoformat(timespec="seconds"), "event": "search", "query": "q1",
+         "hits": 1, "top": "a"},
+        {"ts": (base + _dt.timedelta(minutes=10)).isoformat(timespec="seconds"),
+         "event": "search", "query": "q1 again", "hits": 1, "top": "a"},
+    ])
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["repeated_searches"] == 0
+
+
+def test_repeated_line_is_printed(tmp_path, capsys):
+    store = tmp_path / ".memory"
+    store.mkdir()
+    base = _dt.datetime(2026, 1, 1, 12, 0, 0)
+    append_raw(store, [
+        {"ts": base.isoformat(timespec="seconds"), "event": "search", "query": "q1",
+         "hits": 1, "top": "a", "session": "s1"},
+        {"ts": (base + _dt.timedelta(seconds=30)).isoformat(timespec="seconds"),
+         "event": "search", "query": "q1 again", "hits": 1, "top": "a", "session": "s1"},
+    ])
+    memory_stats.main(["--store", str(store)])
+    out = capsys.readouterr().out
+    assert "repeated" in out
+    assert "50%" in out
+
+
+def test_repeated_line_is_absent_without_any_searches(tmp_path, capsys):
+    """Gated like the `via` line: writes and rejects with no search at all leave
+    nothing for `repeated` to report."""
+    store = tmp_path / ".memory"
+    store.mkdir()
+    memory_lib.log_event(store, "write", slug="a", mode="create", chars=400)
+    memory_stats.main(["--store", str(store)])
+    assert "repeated" not in capsys.readouterr().out
+
+
+def test_repeated_searches_scales_linearly(tmp_path):
+    """`_repeated_searches` used to scan the full, ever-growing history of each
+    stream with `any()` on every record — O(n) per record, O(n²) overall. A
+    real, unrotated MCP-only log is one big session-less stream, and 20 000
+    such records took 14s before this was fixed to keep only the sliding
+    120s window per stream (a deque plus a Counter of tops still in it).
+    One second apart each, so the window holds roughly the last 120 records
+    at any point — this exercises eviction on almost every record, not just
+    growth — and must still finish in well under a second, and still count
+    correctly."""
+    store = tmp_path / ".memory"
+    store.mkdir()
+    base = _dt.datetime(2026, 1, 1, 0, 0, 0)
+    n = 20_000
+    append_raw(store, [
+        {"ts": (base + _dt.timedelta(seconds=i)).isoformat(timespec="seconds"),
+         "event": "search", "query": f"q{i}", "hits": 1, "top": "a"}
+        for i in range(n)
+    ])
+    started = time.perf_counter()
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    elapsed = time.perf_counter() - started
+    assert elapsed < 2.0, f"took {elapsed:.2f}s — repeated-search counting regressed to O(n^2)"
+    # 1s apart, well inside the 120s window: every record but the first repeats
+    # the one right before it.
+    assert s["repeated_searches"] == n - 1
