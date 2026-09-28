@@ -45,8 +45,11 @@ Baseline, the 0.8.2 text, 240 sessions:
     (p≈0.003), because the sentence no longer sat under the command example.
 - **v2 shipped in 0.8.3.** It keeps "every word in one query", keeps
   `--touching` directly under the example, drops the reword sentence, and adds
-  one MCP paragraph about passing `touching` before a change. It was measured
-  on the 80 Sonnet cells v1 moved:
+  one paragraph about passing `touching` before a change. That paragraph is
+  marked `<!-- mcp -->` in the source block so the MCP server's `initialize`
+  result includes it, but `render()` only strips the marker line, not the
+  paragraph, so it also renders into the instruction file — both routes see
+  it, not MCP alone. It was measured on the 80 Sonnet cells v1 moved:
   - touching on edits: 21/40 → 28/40 (p=0.17);
   - searched over MCP on the edit and bugfix tasks: 5/20 → 9/20 (p=0.32);
   - paraphrase task: 10/10 → 9/10.

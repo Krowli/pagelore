@@ -107,11 +107,11 @@ search as a repeat when an earlier search within the last two minutes got back
 the same top page — an agent re-searching with a paraphrase instead of
 trusting the first answer, which is the pattern this number exists to
 surface. Searches are grouped by session for this, except that every search
-with no session at all shares one group instead of being left out: `lore mcp`
-runs as a long-lived server process that never sees the session id the
-harness exports to a shell, so every search made through MCP is session-less
-— and that turned out to be exactly where the real repeats were. Two
-searches in different, named sessions never count against each other.
+with no session at all shares one group instead of being left out: records
+without a session — older logs, and clients that do not pass a session id, as
+seen in a real log — are grouped as one stream, and that turned out to be
+exactly where the real repeats were. Two searches in different, named
+sessions never count against each other.
 
 ```
 2026-08-17T18:31:03 … 2026-09-16T23:35:03
@@ -359,11 +359,11 @@ through the command, `"mcp"` through `lore mcp` — the two routes call the same
 rule is wrong rather than the writer; searches that return nothing point at a
 hole in the corpus or in ranking; a search re-returning, within two minutes, a
 top page an earlier search already returned points at an agent re-asking
-instead of trusting the first answer — searches with no session at all count
-against each other for this (an MCP search never carries one), since that is
-where the pattern actually turned up; `--touching` searches that found no
-page point at a source no page cites yet; sessions that searched and never
-wrote are the write side's "did it happen".
+instead of trusting the first answer — records without a session (older logs,
+and clients that do not pass a session id, as seen in a real log) are grouped
+as one stream, since that is where the pattern actually turned up;
+`--touching` searches that found no page point at a source no page cites yet;
+sessions that searched and never wrote are the write side's "did it happen".
 
 Set `PAGELORE_NO_LOG` (any non-empty value) to turn logging off entirely —
 `log_event` then writes nothing. Meant for measurement runs (`evals/speed.py`

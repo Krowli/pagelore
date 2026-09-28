@@ -350,6 +350,24 @@ def test_repeat_needs_a_non_null_top(tmp_path):
     assert s["repeated_searches"] == 0
 
 
+def test_non_string_ts_is_skipped_instead_of_crashing(tmp_path):
+    """`fromisoformat` raises TypeError on a non-string `ts` (an int, say, from a
+    malformed or hand-edited log line), not just the KeyError/ValueError the old
+    except clause caught. That record must be skipped like any other unparseable
+    one, not crash `lore stats`."""
+    store = tmp_path / ".memory"
+    store.mkdir()
+    base = _dt.datetime(2026, 1, 1, 12, 0, 0)
+    append_raw(store, [
+        {"ts": 12345, "event": "search", "query": "q1", "hits": 1, "top": "a", "session": "s1"},
+        {"ts": base.isoformat(timespec="seconds"), "event": "search", "query": "q2",
+         "hits": 1, "top": "b", "session": "s1"},
+    ])
+    s = memory_stats.summarise(memory_stats.read_log(store, None))
+    assert s["repeated_searches"] == 0
+    assert s["searches"] == 2
+
+
 def test_session_less_burst_with_same_top_counts_as_repeats(tmp_path):
     """`lore mcp` runs as a long-lived server process that never sees the
     harness's session env var, so every MCP search is session-less — and a real

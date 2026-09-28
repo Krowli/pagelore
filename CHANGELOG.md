@@ -14,8 +14,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   records without the field as `unknown` rather than miscounting them.
   `lore stats` also reports `repeated`: a search that re-returned, within two
   minutes, the same top page an earlier search in the same session had already
-  returned — records without a session, which includes every MCP search, count
-  as one stream — the paraphrase-and-reask pattern real logs showed.
+  returned — records without a session (older logs, and clients that do not
+  pass a session id, as seen in a real log) are grouped as one stream — the
+  paraphrase-and-reask pattern real logs showed.
 - **`PAGELORE_NO_LOG` turns logging off entirely.** Any non-empty value makes
   `log_event` a no-op. `evals/speed.py` sets it on every process it spawns, so
   a benchmark run never lands in a real project's log.
@@ -42,9 +43,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Agent instructions: every word in one query.** The block and the MCP
   `memory_search` description now ask for synonyms, the component and the symptom
   in one query, and the MCP instructions ask for the file's path as `touching`
-  before changing it. Measured on Claude Code with Opus 5.5 and Sonnet 5 (see
-  docs/measurements.md); a first version that also said "do not reword" was
-  measured to hurt and was not shipped.
+  before changing it. Measured on Claude Code: baseline and v1 on Opus 5.5 and
+  Sonnet 5 (240 sessions each); the shipped v2 on the Sonnet 5 cells v1 moved
+  (80 sessions) (see docs/measurements.md); a first version that also said "do
+  not reword" was measured to hurt and was not shipped.
 - **The `⚠ source changed` / `⚠ source gone` check is faster on a long history.**
   `git log` is now read incrementally and stopped as soon as every cited source
   has an answer, instead of always walking the full log. `lore show` also reads

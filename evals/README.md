@@ -126,7 +126,7 @@ above — a search practically never comes back empty, so establishing absence i
 `acceptance.py` answers one yes/no — did any search land — for one session, and keeps
 nothing. Real logs show behaviours that question cannot see: the same top page returned
 three to five times to reworded queries, `--touching` never used, no page written after a
-fix. `evals/agent_eval.py` runs a real Claude Code agent through five fixed tasks, many
+fix. `evals/agent_eval.py` runs a real Claude Code agent through six fixed tasks (A–F), many
 times, keeps every session, and puts a number with an interval on each behaviour, so an
 instruction change can be accepted or rejected on evidence.
 

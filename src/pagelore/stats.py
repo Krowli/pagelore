@@ -75,13 +75,12 @@ def _repeated_searches(searches: list[dict]) -> int:
 
     Grouped by session — except that every record with NO session is grouped
     together into one shared stream, rather than being skipped. That is not a
-    loosening for its own sake: `lore mcp` runs as a long-lived server process
-    that never sees `$CLAUDE_CODE_SESSION_ID` (the harness exports it to the
-    shell the Bash tool runs in, not to a stdio server it spawns once), so
-    every MCP search is session-less — and a real log showed exactly this
-    stream carrying five rewordings of one question, four of them repeats,
-    that the session-keyed version reported as zero. A log line from before
-    `session` shipped at all falls into the same bucket, for the same reason.
+    loosening for its own sake: records without a session — older logs, and
+    clients that do not pass a session id, as seen in a real log — are
+    grouped as one stream, and a real log showed exactly this stream carrying
+    five rewordings of one question, four of them repeats, that the
+    session-keyed version reported as zero. A log line from before `session`
+    shipped at all falls into the same bucket, for the same reason.
     The 120-second window keeps the false-positive cost low: two genuinely
     different agents landing on the same top page for unrelated queries
     within two minutes of each other is rare, and missing the real,
@@ -105,8 +104,12 @@ def _repeated_searches(searches: list[dict]) -> int:
     for r in searches:
         try:
             ts = _dt.datetime.fromisoformat(r["ts"]).timestamp()
-        except (KeyError, ValueError):
-            continue  # an unparseable ts can neither match nor be matched
+        except (KeyError, ValueError, TypeError, OSError):
+            # KeyError/ValueError: missing or unparseable `ts`. TypeError: a
+            # non-string `ts` (a hand-edited or malformed log line). OSError:
+            # `.timestamp()` on a naive pre-1970 datetime can raise on Windows.
+            # None of these can be matched against, so the record is skipped.
+            continue
         top = r.get("top")
         if top is None:
             continue  # a null top can never match, so it is not worth tracking
