@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import freshness
 from .cli import add_version
-from .lib import find_page, find_store, links, load_pages, read_text, refuse_missing
+from .lib import find_store, links, load_pages, read_text, refuse_missing
 
 
 def main(argv: list[str] | None = None, *, prog: str = "lore show") -> int:
@@ -26,7 +26,12 @@ def main(argv: list[str] | None = None, *, prog: str = "lore show") -> int:
     store = args.store or find_store()
     cmd = prog.split()[0]
 
-    page = find_page(store, args.slug)
+    # One read of the store, not two: find_page's own scan plus a second
+    # load_pages(store) for backlinks used to walk every page in the store
+    # twice per `show`. The page named by the slug is just the matching
+    # element of the same list the backlink scan needs anyway.
+    pages = load_pages(store)
+    page = next((p for p in pages if p.slug == args.slug), None)
     if page is None:
         return refuse_missing(store, args.slug, cmd)
     if page.superseded_by:
@@ -39,7 +44,7 @@ def main(argv: list[str] | None = None, *, prog: str = "lore show") -> int:
     # What it cannot see without reading every other page is who else already
     # points here \u2014 stdout stays byte-identical to the file, so this goes on
     # stderr alongside the superseded notice.
-    backlinks = sorted({p.slug for p in load_pages(store)
+    backlinks = sorted({p.slug for p in pages
                         if p.slug != page.slug and page.slug in links(p.body)})
     if backlinks:
         print(f"linked from: {', '.join(backlinks)}", file=sys.stderr)

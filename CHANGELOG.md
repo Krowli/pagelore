@@ -12,13 +12,20 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   searches.** The log's `search` events now carry `via` (`"cli"` or `"mcp"`);
   `lore stats` prints a breakdown when any record has it, and treats older
   records without the field as `unknown` rather than miscounting them.
-  `lore stats` also reports `repeated`: a search in the same session that
-  re-returned, within two minutes, the same top page an earlier search in that
-  session had already returned — the paraphrase-and-reask pattern real logs
-  showed.
+  `lore stats` also reports `repeated`: a search that re-returned, within two
+  minutes, the same top page an earlier search in the same session had already
+  returned — records without a session, which includes every MCP search, count
+  as one stream — the paraphrase-and-reask pattern real logs showed.
 - **`PAGELORE_NO_LOG` turns logging off entirely.** Any non-empty value makes
   `log_event` a no-op. `evals/speed.py` sets it on every process it spawns, so
   a benchmark run never lands in a real project's log.
+
+### Changed
+
+- **The `⚠ source changed` / `⚠ source gone` check is faster on a long history.**
+  `git log` is now read incrementally and stopped as soon as every cited source
+  has an answer, instead of always walking the full log. `lore show` also reads
+  the store once instead of twice.
 
 ## [0.8.2] - 2026-09-27
 
