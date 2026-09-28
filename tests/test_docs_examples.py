@@ -11,7 +11,7 @@ Two shapes are deliberately not tested here:
 - **Usage synopses** (`lore search [-k K] [--store STORE] …`), the bracket/brace
   grammar `docs/cli.md` prints under each command heading. That notation is not
   shell syntax — `[--store STORE]` is not a value the parser could accept — so
-  these lines are named in `ALLOWLIST` with the reason, rather than pretended
+  these lines are recognised by that grammar and skipped, rather than pretended
   parseable.
 - `lore dev`, which parses `--sandbox`/`--panes` by hand (see `dev.py`) rather
   than with `argparse`, so there is no parser to check it against; its one
@@ -32,27 +32,26 @@ REPO = Path(__file__).resolve().parents[1]
 DOC_FILES = [REPO / "README.md", *sorted((REPO / "docs").glob("*.md")),
              REPO / "npm" / "README.md", REPO / "src" / "pagelore" / "data" / "AGENT.md"]
 
-# file (relative to the repo root) -> {line: reason}. A line is skipped rather
-# than parsed when it genuinely is not a command — usage grammar or prose — so a
-# failure here always means a real documented invocation broke.
-ALLOWLIST: dict[str, dict[int, str]] = {
-    "docs/cli.md": {
-        4: "two usage-synopsis fragments run together with prose (\"--help for one "
-           "command's flags\"); not a literal invocation, and the apostrophe in "
-           "\"command's\" is not shell-quoted",
-        67: "usage synopsis: [--store STORE] is bracket grammar, not a real value",
-        80: "usage synopsis: [--store STORE] is bracket grammar, not a real value",
-        88: "usage synopsis: [--store STORE] [--since SINCE] [--json] is bracket grammar",
-        118: "usage synopsis: [--kind KIND] [--source SOURCE] is bracket grammar",
-        202: "usage synopsis: [--store STORE] is bracket grammar, not a real value",
-        212: "usage synopsis: [--store STORE] is bracket grammar, not a real value",
-        222: "usage synopsis: [--agent {...}] [--scope {...}] is bracket/choice grammar",
-        265: "usage synopsis: [--json] is bracket grammar, not a real value",
-        276: "usage synopsis: [--yes] is bracket grammar, not a real value",
-        309: "usage synopsis, and lore dev parses --sandbox/--panes by hand — no "
-             "argparse parser exists to check it against",
-    },
+# Usage synopses (`lore doctor [--json]`, `lore init [--agent {claude,…}]`) are
+# recognised by their own grammar — a bracketed optional or a {choice} brace is
+# never a literal argument — so they need no list, and editing the docs above
+# them cannot break the match. What is left are lines that are not commands for
+# another reason, named by their exact text (never by line number, which the
+# first edit above them would shift). A failure here always means a real
+# documented invocation broke.
+ALLOWLIST: dict[str, str] = {
+    "lore <command> [flags]        lore <command> --help for one command's flags":
+        "two usage-synopsis fragments run together with prose; not an invocation",
+    "lore dev [--sandbox] [--panes]":
+        "lore dev parses --sandbox/--panes by hand — no argparse parser exists "
+        "to check it against",
 }
+
+
+def _is_synopsis(command: str) -> bool:
+    words = command.split()[2:]  # past `lore <subcommand>`
+    return any(w.startswith("[") or ("{" in w and "}" in w) for w in words)
+
 
 # A bash heredoc opener: `<<'PMEOF'`, `<<PMEOF`, `<<-'PMEOF'`. Its body is page
 # text, not a command, and is skipped up to the matching terminator line.
@@ -148,9 +147,8 @@ def test_every_documented_lore_command_still_parses():
     checked = 0
     for path in DOC_FILES:
         rel = path.relative_to(REPO).as_posix()
-        reasons = ALLOWLIST.get(rel, {})
         for line_no, command in extract_commands(path.read_text(encoding="utf-8")):
-            if line_no in reasons:
+            if command in ALLOWLIST or _is_synopsis(command):
                 continue
             try:
                 tokens = shlex.split(command, comments=True)
