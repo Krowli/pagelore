@@ -72,8 +72,7 @@ TOOLS = [
                 "query": {"type": "string",
                           "description": "Every word you would try — synonyms, the "
                                          "component, the symptom — in one query; they "
-                                         "are OR'd and ranked. Search again to ask "
-                                         "something different, not to reword."},
+                                         "are OR'd and ranked."},
                 "touching": {"type": "array", "items": {"type": "string"},
                              "description": "Paths of files you are about to change: "
                                             "pages written against them come first. "
