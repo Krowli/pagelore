@@ -19,6 +19,23 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`PAGELORE_NO_LOG` turns logging off entirely.** Any non-empty value makes
   `log_event` a no-op. `evals/speed.py` sets it on every process it spawns, so
   a benchmark run never lands in a real project's log.
+- **CI gates retrieval quality, speed, the MCP round trip and documented
+  examples.** `tests/test_evals_baseline.py` runs the shipped ranker in-process
+  against `evals/baseline.json` and fails a PR that regresses nDCG@10, MRR@10,
+  recall, or the unanswerable-query false-confidence rate by more than 0.005, in
+  both FTS5-index and no-FTS5 (scan) mode. A new `speed-gate` job fails if a warm
+  search over 1000 pages exceeds 1000 ms. `install-smoke`'s MCP step now drives a
+  full `tools/call` round trip — `memory_write`, `memory_search`, and a
+  credential-shaped write that must be refused. `tests/test_docs_examples.py`
+  parses every documented `lore …` command against the real CLI parsers so a
+  renamed or removed flag breaks the build instead of the docs.
+- **A measurement of how a real Claude Code agent uses the memory.**
+  `evals/agent_eval.py` runs `claude -p` against a throwaway project per model ×
+  connection (instruction file or MCP) × task and scores each session: whether and
+  how often it searched, repeats, `--touching`, search before the first edit,
+  bypassing the search through `.memory`, page written, correct or abstained
+  answers, turns and cost. A manual GitHub workflow runs it with an
+  `ANTHROPIC_API_KEY` secret.
 
 ### Changed
 

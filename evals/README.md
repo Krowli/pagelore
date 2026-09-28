@@ -43,6 +43,45 @@ what today costs. See `references/retrieval.md`.
 | `fts5 on raw text` | FTS5 with its own tokenizer — the variant that loses NFC, casefold and identifiers |
 | `grep -rilE` | no ranker at all: every page containing any query word, in filename order |
 
+## CI gates
+
+Four checks run on every push and PR, not only when someone remembers to run
+`evals/run.py` by hand:
+
+- **Retrieval quality.** `tests/test_evals_baseline.py` runs the two shipped
+  methods (`shipped (fts5 index)`, `shipped fallback (scan)`) in-process — no
+  subprocess, and none of the other methods above, which is most of the cost of
+  a full run — and fails if any metric in `evals/baseline.json` regresses by more
+  than 0.005 (the opposite direction for `unanswerable answered_anyway`, where
+  lower is better). It runs twice in CI, with and without `PAGELORE_NO_FTS5`;
+  `baseline.json` keeps separate `fts5` and `scan` sections because the two
+  shipped methods become the identical code path under that variable (see the
+  test's own module docstring for why one baseline would be wrong in the other
+  mode). **To update it on purpose** — after a change that improves ranking, in
+  the same PR — regenerate both sections:
+
+  ```bash
+  python3 evals/run.py --json                       # fts5 section
+  PAGELORE_NO_FTS5=1 python3 evals/run.py --json     # scan section
+  ```
+
+  and copy `shipped (fts5 index)`, `shipped fallback (scan)` and
+  `_touching.methods["path as text query"]` from each into the matching section
+  of `evals/baseline.json`. Never edit the file to make a failing gate pass
+  without knowing why the number moved.
+- **Speed.** A `speed-gate` job runs `evals/speed.py --pages 1000` against the
+  wheel it just installed (`lore` resolved from `PATH`, not this checkout) and
+  fails if the warm, indexed search exceeds 1000 ms — about 12x today's local
+  number, to absorb a noisy runner without absorbing a real regression.
+- **The MCP round trip.** `install-smoke`'s MCP step drives `tools/call` over
+  `lore mcp`'s stdio, not just `tools/list`: a `memory_write` lands a real page,
+  a `memory_search` finds it back, and a write whose body contains a
+  credential-shaped string is refused with the same `FIX:` line the CLI prints.
+- **Documented examples.** `tests/test_docs_examples.py` collects every `lore …`
+  line in a fenced code block across the docs and checks it against the real
+  `argparse` parser for that subcommand, without running the command. A renamed
+  or removed flag breaks the build instead of quietly going stale in a doc.
+
 ## Does the store help the agent
 
 `evals/run.py` measures retrieval. It does not measure the thing that matters, which is
