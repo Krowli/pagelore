@@ -15,6 +15,8 @@ hooks; the runtime is the Python 3.9+ standard library.
 **Works with:** Claude Code · Codex CLI · Cursor · Gemini CLI · anything that can
 run a shell command or an MCP stdio server.
 
+[Website](https://pagelore.aioomi.com) · [PyPI](https://pypi.org/project/pagelore/) · [npm](https://www.npmjs.com/package/pagelore)
+
 ## Why
 
 Agents re-derive the same context every session and confidently restate decisions
