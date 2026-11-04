@@ -46,6 +46,13 @@ measured.
 
 `{prompt}`, `{project}` and `{repo}` are substituted into the agent command.
 The command is split with shlex, so quote as you would in a shell.
+
+`--task <id>` runs a task of `evals/agent_tasks.json` instead of the question,
+with the agent_eval project, `lore` shim and clean environment — the way to put
+one of those tasks in front of a harness agent_eval cannot drive (Codex, OpenCode).
+A `stale` task is scored on what the agent did to its two marked pages, read from
+the store's log, and the last line is that score as JSON. `--block FILE` puts an
+older rendered block in front of the agent instead of this tree's.
 """
 from __future__ import annotations
 
@@ -135,7 +142,11 @@ def main(argv=None) -> int:
     ap.add_argument("--question", default=QUESTION)
     ap.add_argument("--keep", action="store_true", help="leave the project on disk")
     ap.add_argument("--timeout", type=int, default=600)
+    ap.add_argument("--task", help="a task id from evals/agent_tasks.json instead of --question")
+    ap.add_argument("--block", metavar="FILE", help="this rendered block instead of this tree's")
     args = ap.parse_args(argv)
+    if args.task:
+        return run_task(args)
 
     command = os.environ.get("PAGELORE_BIN") or shutil.which("lore") or shutil.which("pagelore")
     if command is None:
@@ -181,6 +192,58 @@ def main(argv=None) -> int:
     if not args.keep:
         shutil.rmtree(tmp, ignore_errors=True)
     return 0 if searches else 1
+
+
+def run_task(args) -> int:
+    import agent_eval as ae  # here, not at the top: agent_eval imports this module
+
+    tasks = {t["id"]: t for t in ae.load_tasks()}
+    if args.task not in tasks:
+        print(f"FIX: --task is one of {', '.join(tasks)}", file=sys.stderr)
+        return 2
+    task = tasks[args.task]
+    block = Path(args.block).read_text(encoding="utf-8") if args.block else None
+    tmp = Path(tempfile.mkdtemp(prefix="pm-acceptance-"))
+    project = build_project(tmp, args.pointer, task.get("files") or {}, block=block)
+    if task.get("history"):
+        ae.stage_history(project, task)
+    env = ae.child_env(tmp / "bin", tmp / "home")
+    ae.make_shim(tmp / "bin")
+    lore_line = ae.check_lore(env)
+
+    cmd = [part.format(prompt=task["prompt"], project=str(project), repo=str(REPO))
+           for part in shlex.split(args.agent)]
+    started = time.perf_counter()
+    try:
+        proc = subprocess.run(cmd, cwd=project, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=args.timeout,
+                              env=env, stdin=subprocess.DEVNULL)
+        code, answer, err = proc.returncode, proc.stdout.strip(), proc.stderr
+    except subprocess.TimeoutExpired as exc:
+        code, answer, err = None, (exc.stdout or b"").decode("utf-8", "replace").strip(), ""
+    elapsed = time.perf_counter() - started
+
+    events = log_events(project / ".memory")
+    score = {"task": task["id"], "pointer": args.pointer, "block": args.block,
+             "agent": cmd[0], "exit": code, "elapsed_s": round(elapsed, 1),
+             "searched": any(e.get("event") == "search" for e in events),
+             "correct": ae.matches(answer, task.get("answer_any")),
+             "endorses_obsolete": None, **ae.stale_metrics(task, events)}
+    obsolete = ae.matches(answer, task.get("obsolete_any"))
+    if obsolete is not None:
+        score["endorses_obsolete"] = bool(obsolete and not score["correct"])
+    print(f"agent      {' '.join(cmd[:2])}  (exit {code}, {elapsed:.0f}s)")
+    print(f"lore       {lore_line}")
+    print(f"project    {project}  pointer={args.pointer}")
+    for e in events:
+        print(f"log        {e.get('event'):8} {e.get('slug') or e.get('query') or ''}")
+    print(f"answer     {answer[-400:]!r}")
+    if code not in (0, None):
+        print(f"\nstderr:\n{err[-1500:]}", file=sys.stderr)
+    if not args.keep:
+        shutil.rmtree(tmp, ignore_errors=True)
+    print(json.dumps(score))
+    return 0 if score["searched"] else 1
 
 
 if __name__ == "__main__":

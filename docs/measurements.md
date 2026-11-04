@@ -217,6 +217,58 @@ searched on the edit and bugfix tasks 5/20 → 9/20 (p=0.32), paraphrase task 10
 (p=1.0). Every change points the right way and none is significant at this n;
 the MCP edit-task gap remains the open problem. Repeats did not move in any run.
 
+## Stale pages: does the agent check them
+
+`⚠ source changed` marks a page whose cited file was committed after it.
+`lore confirm` (unreleased, after 0.8.3) records that a page was checked against the code. The
+instruction block now says what to do with the marker: check the claim; if it
+still holds, `lore confirm`; if it is wrong, amend or `--supersedes`.
+
+Task G of `evals/agent_eval.py` measures whether agents follow it. Two pages cite
+one file, and a later commit leaves one of them true (clipboard reads are refused)
+and the other false (the write cap moved from 100 000 to 1 000 000 bytes). The
+setup: 2026-11-04, Claude Code 2.1.318, Opus 5.5, 10 sessions per cell, paired in
+one environment. Codex CLI 0.166 ran the same project through
+`acceptance.py --task G`.
+
+| | true page confirmed | false page fixed | false page confirmed unfixed | correct answer |
+|---|---|---|---|---|
+| file, block without the sentence | 0/10 | 2/10 | 0/10 | 10/10 |
+| file, block with the sentence | **10/10** | **10/10** | 0/10 | 10/10 |
+| MCP, two tools (no `memory_confirm`) | 0/10 | 0/10 | 0/10 | 10/10 |
+| MCP, `memory_confirm` + search description | **5/10** | **7/10** | 0/10 | 10/10 |
+| Codex, block without the sentence | 0/10 | 0/10 | 0/10 | 10/10 |
+| Codex, block with the sentence | **10/10** | **10/10** | 0/10 | 10/10 |
+
+Significance:
+
+- File route: Fisher p < 0.001 for confirmed, 0.001 for fixed.
+- MCP route: p = 0.033 for confirmed, 0.003 for fixed.
+
+The answer is right in every arm, because the agent reads the code either way.
+What the sentence changes is the store: without it, every session left both pages
+marked and the false one still saying 100 000 for the next agent. Every fix
+carried the new value, and no session confirmed the false page without fixing it.
+
+The cost is a turn: the median went 4 → 5 on the file route and 5 → 7.5 over MCP,
+and $0.11 → $0.13 per session.
+
+Over MCP the gap is the one this table already shows for search: 7 of 10 MCP
+sessions searched at all, against 10 of 10 on the file route.
+
+The regression check is task A ("why was this decided"), paired, 10 sessions a
+side. Search rate and correctness did not move:
+
+| route | searched | correct |
+|---|---|---|
+| file | 10/10 → 10/10 | 10/10 → 10/10 |
+| MCP | 10/10 → 10/10 | 7/10 → 6/10 (p = 1.0) |
+
+The raw records are committed in `evals/results/`:
+
+- `agent-2026-11-04-0.8.3-{block-0.8.3,confirm,mcp-2tools}.jsonl`
+- `codex-2026-11-04-0.8.3-stale.jsonl`
+
 ## Speed, and the cost of the gate
 
 One search, end to end, as the command a user types: a fresh process, interpreter
@@ -265,6 +317,8 @@ python3 evals/dense_probe.py                   # needs fastembed; --static MODEL
 python3 evals/compare_basic_memory.py          # needs basic-memory
 python3 evals/acceptance.py --pointer include --agent '...'   # a real agent session
 python3 evals/acceptance.py --pointer mcp --agent '...'       # the same session over MCP
+python3 evals/agent_eval.py --tasks G --label stale           # stale pages, real Claude sessions
+python3 evals/acceptance.py --task G --pointer paste --agent 'codex exec …'  # the same, any harness
 pytest                                         # both retrieval paths, in CI on three operating systems
 ```
 

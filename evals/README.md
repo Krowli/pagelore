@@ -126,7 +126,7 @@ above — a search practically never comes back empty, so establishing absence i
 `acceptance.py` answers one yes/no — did any search land — for one session, and keeps
 nothing. Real logs show behaviours that question cannot see: the same top page returned
 three to five times to reworded queries, `--touching` never used, no page written after a
-fix. `evals/agent_eval.py` runs a real Claude Code agent through six fixed tasks (A–F), many
+fix. `evals/agent_eval.py` runs a real Claude Code agent through seven fixed tasks (A–G), many
 times, keeps every session, and puts a number with an interval on each behaviour, so an
 instruction change can be accepted or rejected on evidence.
 
@@ -135,6 +135,8 @@ python3 evals/agent_eval.py --label baseline          # 2 arms × 6 tasks × 10 
 python3 evals/agent_eval.py --models claude-opus-5-5,claude-sonnet-5 --label baseline
 python3 evals/agent_eval.py --arms mcp --tasks C --runs 3 --label try
 python3 evals/agent_eval.py --dry-run --tasks C       # build the projects, print the commands
+git show 7089143:AGENTS.md > old.md                   # an older rendered block …
+python3 evals/agent_eval.py --tasks G --arms include --block old.md --label old-block  # … measured
 python3 evals/agent_eval.py --summarize evals/results/agent-…-baseline.jsonl \
                                         evals/results/agent-…-guidance.jsonl
 ```
@@ -159,18 +161,32 @@ user's mail.
 answered by one page; **B** a question no page answers; **C** an edit to a file a page
 constrains; **D** a question whose first page was superseded; **E** a non-obvious bug to fix;
 **F** a question worded without the vocabulary of the page that answers it, which invites
-reworded searches. `n_searches` and `repeats` on B and F are the churn measures.
+reworded searches. `n_searches` and `repeats` on B and F are the churn measures. **G** is
+not on corpus pages: two pages of its own cite one file, and the project is a git repository
+whose last commit changed that file, so both read `⚠ source changed`. One is still true (OSC 52
+reads are refused), one is now false (the write cap went from 100 000 to 1 000 000 bytes). It
+measures whether the agent checks a marked page against the code, confirms the true one and
+fixes the false one, instead of answering from the stale page.
+
+`--block FILE` gives the include arm that rendered block instead of this tree's, so a wording
+change is measured against the old wording in the same environment; the header records its
+hash. For a harness this cannot drive, `acceptance.py --task G --pointer paste --agent '…'`
+builds the same project with the same `lore` shim and prints the same stale-page score, read
+from the store's log, as its last line — that is how Codex is measured.
 
 | metric | meaning |
 |---|---|
 | `searched` | the store logged at least one search in the session |
-| `correct` | A, D, F: the answer carries a fact only the right page has (`answer_any`, each phrase checked against the page text by a test, so general knowledge cannot score); B: the answer says the memory lacks it (`abstain_any`); C: the answer names the page's measured constraint; E: not graded |
-| `obsolete` | D: the answer states the superseded decision's facts and none of the current one's (`endorses_obsolete`); history next to the current decision does not count |
+| `correct` | G: the answer gives the cap the code has now, 1 000 000 bytes; A, D, F: the answer carries a fact only the right page has (`answer_any`, each phrase checked against the page text by a test, so general knowledge cannot score); B: the answer says the memory lacks it (`abstain_any`); C: the answer names the page's measured constraint; E: not graded |
+| `obsolete` | D: the answer states the superseded decision's facts and none of the current one's (`endorses_obsolete`); G: it states the stale page's 100 000 and not the code's value; history next to the current fact does not count |
 | `srch<edit` | the first search call came before the first Edit/Write outside the store; sessions that edited nothing are left out of the denominator |
 | `touching` | some search passed `--touching` / `touching` |
 | `wrote` | the store logged a page write (`lore write` or `memory_write`) — the point of task E |
 | `grep_mem` | scanned `.memory` around the command: Grep/Glob into it or over the whole project (no path, `.`, the root), or grep -r / find / git grep / `cd .memory` in Bash |
 | `read_mem` | opened a page file directly (Read, or cat/head/sed). Counted apart from `grep_mem` because the MCP arm has no `show`, so reading the file is how it opens a hit |
+| `conf_true` | G: the store logged a `confirm` of the page that is still true |
+| `fix_false` | G: the store logged a write to the page that is now false, or a write superseding it |
+| `conf_false!` | G: the false page was confirmed and never fixed — it now claims to have been checked and is still wrong, the outcome the marker exists to prevent |
 | `med srch` / `mean rep` | searches per session; searches whose top hit repeats an earlier top hit |
 | `med turn` / `med $` | turns and cost per session, from the result event |
 

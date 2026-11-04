@@ -12,6 +12,16 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `checked` time into the page's frontmatter and logs the event, leaving `updated`
   alone. `⚠ source changed` then fires only for a source committed after that
   check, so the marker stops sitting on every page of an active project.
+- **`lore mcp` serves `memory_confirm`**, the same command as a tool, and the
+  search tool's description says what a `source changed` hit asks for. `lore
+  doctor` now expects three tools from a registered server.
+- **`evals/agent_eval.py` task G** measures what agents do with a marked page:
+  confirm the true one, fix the false one. `--block FILE` measures an older
+  instruction wording. `evals/acceptance.py --task G` runs the same task on any
+  harness. The measured effect of the marker sentence: Claude Code confirmed
+  0/10 → 10/10 and fixed 2/10 → 10/10; Codex 0/10 → 10/10 for both. MCP with
+  `memory_confirm`: confirmed 5/10, fixed 7/10, against 0/10 without it.
+  [Measurements](docs/measurements.md).
 
 ## [0.8.3] - 2026-09-28
 

@@ -572,6 +572,23 @@ def test_a_block_file_replaces_the_include_arms_block(tmp_path):
         encoding="utf-8")
 
 
+@POSIX_ONLY
+def test_acceptance_runs_a_stale_task_and_scores_it_from_the_log(tmp_path, monkeypatch, capsys):
+    """`acceptance.py --task` is how a harness agent_eval cannot drive gets the same
+    task. A stand-in agent that confirms the true page and states the current cap
+    must score exactly that; the score is the last line, as JSON."""
+    import acceptance
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    agent = ("sh -c 'lore confirm clipboard-osc52-reads-refused >/dev/null; "
+             "echo writes are capped at 1,000,000 bytes'")
+    assert acceptance.main(["--task", "G", "--pointer", "paste", "--agent", agent]) == 1
+    score = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert (score["searched"], score["correct"], score["endorses_obsolete"]) == (
+        False, True, False)
+    assert (score["confirmed_true"], score["fixed_false"],
+            score["confirmed_false_unfixed"]) == (True, False, False)
+
+
 # --- projects ------------------------------------------------------------------
 
 def dry_run(tmp_path, monkeypatch, capsys, *extra):
