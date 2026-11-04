@@ -3,7 +3,8 @@ slug: scripts-carry-the-contract-not-hooks
 title: "The contract rides in the scripts and the skill text, not in any agent's hooks"
 kind: decision
 created: 2026-09-16
-updated: 2026-09-16
+updated: 2026-11-04
+checked: 2026-11-04T15:30:10+00:00
 supersedes:
   - session-hook-not-an-invitation
   - stop-hook-reminds-once
@@ -12,6 +13,7 @@ sources:
   - evals/acceptance.py
   - src/pagelore/data/AGENT.md
   - src/pagelore/search.py
+  - src/pagelore/stats.py
 ---
 
 ## Context
@@ -86,3 +88,21 @@ followed the `superseded by` marker to the reversal, 24 s. One run each, one
 question; this says the description-only path fires on these two harnesses
 today, not how often. Gemini, Cursor, Kimi, Copilot, OpenCode and Pi are
 unmeasured until someone runs the same command there.
+
+## Since 0.4.0
+
+The decision holds: no hook on any harness, the contract carried in text and in
+the program. The names above come from the copied-skill layout that 0.4.0
+replaced with one installed command ([[installed-command-not-copied-directory]]).
+
+| Then | Now |
+|---|---|
+| `memory_search.py` | `lore search` (`src/pagelore/search.py`). It still skips a matching page under `MIN_BODY` on read and shows one with no sources marked `⚠ no sources`. |
+| `memory_lib` | `src/pagelore/lib.py` |
+| `memory_stats.py` | `lore stats` (`src/pagelore/stats.py`). It still counts sessions that searched and never wrote, from the session id stamped into the log. |
+| `SKILL.md` and the skill `description` | gone; see below |
+
+The memory is now announced in two ways:
+
+- The instruction block `src/pagelore/data/AGENT.md`. `lore init` installs it as `~/.pagelore/AGENT.md` and includes or pastes it into each agent's instruction file.
+- The `instructions` field of `lore mcp`, where a person chose MCP ([[mcp-sends-instructions-on-connect]]).

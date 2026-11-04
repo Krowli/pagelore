@@ -4,6 +4,7 @@ title: "The release path rehearses locally, without publishing"
 kind: decision
 created: 2026-09-20
 updated: 2026-09-20
+checked: 2026-11-04T15:26:12+00:00
 sources:
   - tools/smoke.sh
   - Makefile

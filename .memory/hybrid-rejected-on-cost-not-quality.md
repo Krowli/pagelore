@@ -4,6 +4,7 @@ title: "The embedding hybrid is better, and is still refused — on cost, not qu
 kind: decision
 created: 2026-08-18
 updated: 2026-08-18
+checked: 2026-11-04T15:26:54+00:00
 supersedes:
   - bm25f-over-hybrid-retrieval
 sources:

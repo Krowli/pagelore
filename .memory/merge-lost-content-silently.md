@@ -4,6 +4,7 @@ title: "Re-running a write used to delete parts of the page it merged into"
 kind: bug
 created: 2026-08-17
 updated: 2026-08-17
+checked: 2026-11-04T15:26:47+00:00
 sources:
   - src/pagelore/write.py
 ---

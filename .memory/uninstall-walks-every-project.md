@@ -4,6 +4,7 @@ title: "uninstall cleans every project init connected, recorded in ~/.pagelore/p
 kind: bug
 created: 2026-09-27
 updated: 2026-09-27
+checked: 2026-11-04T15:27:56+00:00
 sources:
   - src/pagelore/uninstall.py
   - src/pagelore/init.py

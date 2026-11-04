@@ -3,12 +3,13 @@ slug: one-name-pagelore
 title: "Everything project-memory became pagelore, with a migration instead of a shim"
 kind: decision
 created: 2026-09-26
-updated: 2026-09-26
+updated: 2026-11-04
+checked: 2026-11-04T15:27:37+00:00
 sources:
-  - src/pagelore/instructions.py
-  - src/pagelore/init.py
-  - src/pagelore/lib.py
   - src/pagelore/doctor.py
+  - src/pagelore/init.py
+  - src/pagelore/instructions.py
+  - src/pagelore/lib.py
   - tests/test_rename_migration.py
 ---
 
@@ -34,7 +35,7 @@ npm ([[installed-command-not-copied-directory]]). The per-project store stays
   `PAGELORE_HOME` disables the move.
 - **Environment.** `lib.env(NEW)` reads `PAGELORE_X`, else `PROJECT_MEMORY_X` with
   one stderr warning per process. Stderr because stdout is `--json` or the MCP
-  stream. The fallback is removed in 0.7.0.
+  stream. The fallback stays until a release removes it; the warning no longer promises a version.
 - **MCP.** `init` replaces an old `project-memory` entry only if it equals a shape
   `mcp_entry` produces (an empty `env` tolerated, because `claude mcp add` stores
   one). An edited entry is the person's and is left; `doctor` flags it as

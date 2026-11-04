@@ -4,6 +4,7 @@ title: "UTF-8 input was dropped byte by byte; wide chars are read with a timed d
 kind: bug
 created: 2026-09-21
 updated: 2026-09-21
+checked: 2026-11-04T15:26:26+00:00
 sources:
   - src/pagelore/panes.py
   - tests/test_panes.py

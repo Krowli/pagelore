@@ -3,12 +3,13 @@ slug: dev-panes-prototype
 title: "The two-pane screen ships behind a flag, and the line editor stays the default"
 kind: decision
 created: 2026-09-20
-updated: 2026-09-20
+updated: 2026-11-04
+checked: 2026-11-04T15:26:26+00:00
 sources:
-  - src/pagelore/panes.py
-  - src/pagelore/dev.py
-  - tests/test_panes.py
   - evals/panes_keystrokes.py
+  - src/pagelore/dev.py
+  - src/pagelore/panes.py
+  - tests/test_panes.py
 ---
 
 ## Cause
@@ -22,25 +23,28 @@ and measured.
 
 ## Decision
 
-`lore dev --panes` (and the internal `panes` command) is a two-pane browse
-screen: the left pane lists the store exactly like `lore list`, or narrowed by
-the same ranked `search.search()` the CLI runs; Enter opens the page on the
-right; `q` is back to the line editor. The line editor stays the default and the
-bare-`lore` probe contract (usage, exit 0, never a terminal surface) is
-untouched — the panes are reached only through `--panes` or the `panes` command.
+`lore dev --panes` (and the internal `panes` command) is an opencode-shaped
+screen (first built as a two-pane browser, reshaped in [[panes-opencode-screen]]):
+an ask box, then a transcript of the commands run in-process through the same
+`cli.main` the CLI runs, a `/` command picker, and `o` to open the top hit of the
+last ranked `search`; `q` is back to the line editor. The line editor stays the
+default and the bare-`lore` probe contract (usage, exit 0, never a terminal
+surface) is untouched — the panes are reached only through `--panes` or the
+`panes` command.
 
 The review discipline carried over from the line editor: what a key decides is a
-pure function on a `State` model — rows, query, selection, viewport offset,
-opened page — called directly by tests with no terminal. Only the draw loop
+pure function on a `State` model — turns, field, cursor, history, picker, hits,
+viewport offset — called directly by tests with no terminal. Only the draw loop
 touches `curses`, and one pty test proves the raw screen draws and answers keys.
 `curses` is POSIX and the screen needs a real terminal; where either is missing
 `--panes` prints one line and falls back to the line editor, so a pipe driving
 `lore dev --panes` still reads lines (tested).
 
 Measured (`evals/panes_keystrokes.py`, `make eval-panes`): find + read one page
-is `len(slug) + 10` fewer keystrokes than the CLI's `search` + `show` round trip
-— the slug is never typed again — and costs zero processes where the CLI spawns
-two. Against this store's 30 pages that is 1165 keystrokes. This does not
+is `len(slug) + 7` fewer keystrokes than the CLI's `search` + `show` round trip
+(`len(slug) + 10` on the first two-pane layout) — the slug is never typed again —
+and costs zero processes where the CLI spawns two. Against this store's 30 pages
+the first-layout figure was 1165 keystrokes. This does not
 reverse the earlier rejection: that rejection set the *default*; the panes are
 the opt-in answer to the screen request, invisible to anything that leans on the
 plain contract. [[dev-console-stdlib-only]]

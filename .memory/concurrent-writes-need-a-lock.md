@@ -4,6 +4,7 @@ title: "Two agents on one slug silently lost each other's sections"
 kind: bug
 created: 2026-08-17
 updated: 2026-09-26
+checked: 2026-11-04T15:26:46+00:00
 sources:
   - src/pagelore/lib.py
   - src/pagelore/write.py

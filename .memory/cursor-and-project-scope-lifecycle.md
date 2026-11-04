@@ -4,6 +4,7 @@ title: "Cursor joins init; uninstall and doctor cover project scope and CODEX_HO
 kind: decision
 created: 2026-09-26
 updated: 2026-09-26
+checked: 2026-11-04T15:25:56+00:00
 sources:
   - src/pagelore/init.py
   - src/pagelore/uninstall.py

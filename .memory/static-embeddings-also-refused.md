@@ -4,6 +4,7 @@ title: "Static embeddings are the cheap form of the hybrid, and are refused on t
 kind: decision
 created: 2026-09-15
 updated: 2026-09-15
+checked: 2026-11-04T15:26:54+00:00
 sources:
   - evals/dense_probe.py
   - docs/retrieval.md

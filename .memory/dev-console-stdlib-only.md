@@ -4,6 +4,7 @@ title: "The console is a line editor on stdlib, gated by a tty"
 kind: decision
 created: 2026-09-20
 updated: 2026-09-20
+checked: 2026-11-04T15:26:26+00:00
 sources:
   - src/pagelore/dev.py
   - src/pagelore/cli.py

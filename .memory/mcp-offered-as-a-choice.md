@@ -3,7 +3,8 @@ slug: mcp-offered-as-a-choice
 title: "MCP ships as a choice the wizard offers; the measurement stays on the question"
 kind: decision
 created: 2026-09-20
-updated: 2026-09-20
+updated: 2026-11-04
+checked: 2026-11-04T15:26:30+00:00
 supersedes:
   - mcp-measured-and-refused
 sources:
@@ -44,7 +45,7 @@ changing them means running the acceptance arms again.
 ## How the server finds the store
 
 Claude Code promises a stdio server no working directory; it puts the project
-root in `CLAUDE_PROJECT_DIR` instead. So the store is `PROJECT_MEMORY_DIR`, then
+root in `CLAUDE_PROJECT_DIR` instead. So the store is `PAGELORE_DIR`, then
 `find_store(CLAUDE_PROJECT_DIR)`, then the cwd walk every command uses. The write
 goes through `write.main` with `--store` passed explicitly, which also makes
 `--source` paths resolve against the project root (`resolve_source` tries the

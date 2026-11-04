@@ -4,6 +4,7 @@ title: "uninstall --yes removes only pagelore's own files, never a --store home 
 kind: bug
 created: 2026-09-27
 updated: 2026-09-27
+checked: 2026-11-04T15:27:56+00:00
 sources:
   - src/pagelore/uninstall.py
   - tests/test_init.py

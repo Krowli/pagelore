@@ -3,14 +3,15 @@ slug: show-list-edit-rm-are-commands
 title: "Opening, listing, editing and deleting pages are commands, not shell recipes"
 kind: decision
 created: 2026-09-20
-updated: 2026-09-20
+updated: 2026-11-04
+checked: 2026-11-04T15:26:26+00:00
 sources:
-  - src/pagelore/show.py
-  - src/pagelore/listing.py
-  - src/pagelore/edit.py
-  - src/pagelore/remove.py
   - src/pagelore/cli.py
   - src/pagelore/data/AGENT.md
+  - src/pagelore/edit.py
+  - src/pagelore/listing.py
+  - src/pagelore/remove.py
+  - src/pagelore/show.py
 ---
 
 ## Context
@@ -38,11 +39,13 @@ way a hand edit goes wrong silently, because search does not refuse a thin page,
 skips it. `lore rm <slug>` deletes and logs a `remove` event. `lore version` is a
 word as well as a flag, and the bare command lists it.
 
-All four take the slug a search printed, look it up through `lib.find_page` — by
-frontmatter slug, through `page_paths`, so the symlink and non-file filters apply —
-and refuse a missing one through `lib.refuse_missing`: exit 2, `no page 'x'`, and a
-`FIX: lore search 'x'` line, because an agent that typed a slug from memory is one
-search away from the right one and its loop already follows `FIX:`.
+All four take the slug a search printed, look it up by frontmatter slug (`edit` and
+`rm` through `lib.find_page`; `show` matches the same slug in its own
+`load_pages` list, which it reuses for backlinks) — so the symlink and non-file
+filters apply — and refuse a missing one through `lib.refuse_missing`: exit 2,
+`no page 'x'`, and a `FIX: lore search 'x'` line, because an agent that typed a
+slug from memory is one search away from the right one and its loop already
+follows `FIX:`.
 
 ## Why the module names differ from the command words
 

@@ -4,6 +4,7 @@ title: "The opencode-shaped screen behind lore dev --panes"
 kind: decision
 created: 2026-09-20
 updated: 2026-09-21
+checked: 2026-11-04T15:26:26+00:00
 supersedes:
   - panes-command-field
 sources:

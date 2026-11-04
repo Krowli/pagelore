@@ -4,6 +4,7 @@ title: "lore write does NOT warn on a look-alike page: measured per write, recal
 kind: decision
 created: 2026-09-27
 updated: 2026-09-27
+checked: 2026-11-04T15:26:47+00:00
 sources:
   - evals/duplicate_probe.py
   - src/pagelore/write.py

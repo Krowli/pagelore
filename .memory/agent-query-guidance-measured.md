@@ -4,6 +4,7 @@ title: "Agent guidance measured on real Claude Code sessions: one query, --touch
 kind: decision
 created: 2026-09-28
 updated: 2026-09-28
+checked: 2026-11-04T15:26:54+00:00
 sources:
   - evals/agent_eval.py
   - src/pagelore/data/AGENT.md

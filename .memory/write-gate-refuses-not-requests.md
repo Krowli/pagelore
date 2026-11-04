@@ -4,6 +4,7 @@ title: "The write path refuses pages instead of asking for good ones"
 kind: decision
 created: 2026-08-17
 updated: 2026-09-16
+checked: 2026-11-04T15:26:47+00:00
 sources:
   - src/pagelore/search.py
   - src/pagelore/write.py

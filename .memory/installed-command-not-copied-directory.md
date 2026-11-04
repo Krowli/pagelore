@@ -3,15 +3,16 @@ slug: installed-command-not-copied-directory
 title: "The program is an installed command, and what that cost"
 kind: decision
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-11-04
+checked: 2026-11-04T15:25:56+00:00
 supersedes:
   - pointer-files-per-install-mode
 sources:
+  - evals/acceptance.py
+  - npm/bin/lore.js
   - pyproject.toml
   - src/pagelore/cli.py
-  - npm/bin/lore.js
   - tools/retarget_sources.py
-  - evals/acceptance.py
 ---
 
 ## Context
@@ -103,6 +104,6 @@ cannot drift.
 **Pointing the agent's instruction line into the pipx virtualenv.** The path
 contains `python3.13`, so it dangles silently after a Python upgrade — no error,
 the agent simply stops searching months later. A symlink has the same failure
-behind a stable-looking path. The block lives at `~/.project-memory/AGENT.md` and
+behind a stable-looking path. The block lives at `~/.pagelore/AGENT.md` and
 every `lore` invocation refreshes it, which costs 80 µs against a 52 ms search and
 never creates the directory: its existence is the opt-in signal.

@@ -6,8 +6,8 @@ created: 2026-11-04
 updated: 2026-11-04
 sources:
   - src/pagelore/confirm.py
-  - src/pagelore/freshness.py
   - src/pagelore/data/AGENT.md
+  - src/pagelore/freshness.py
 ---
 
 ## Context
@@ -39,3 +39,20 @@ does not move.
 - Background LLM consolidation, which is how Graphiti, Supermemory and Cognee
   handle staleness: it needs a model and a key, and the agent already in the
   session can check the page for free, visibly in git.
+
+## First audit, 2026-11-04
+
+The command shipped, and then all 41 current pages carrying the marker were checked against the code:
+
+- 28 held as written and were confirmed.
+- 13 needed a correction first, and were then confirmed.
+
+The 13 corrections:
+
+- the `PROJECT_MEMORY_*` environment names, now `PAGELORE_*`;
+- the pre-0.4.0 script and skill names (`memory_search.py`, `SKILL.md`, `USE.md`);
+- the block's home directory, now `~/.pagelore`;
+- drifted character counts;
+- descriptions of the panes screen that predated its reshape.
+
+So the marker was carrying real signal, about one page in three, but it was buried under the other two. After the audit, no current page carries `⚠ source changed`. The six superseded pages keep theirs on purpose: `⚠ superseded by` already tells a reader to go elsewhere.

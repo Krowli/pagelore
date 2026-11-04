@@ -4,6 +4,7 @@ title: "os.kill(pid, 0) is a liveness probe on POSIX and a kill on Windows"
 kind: bug
 created: 2026-08-18
 updated: 2026-09-26
+checked: 2026-11-04T15:26:47+00:00
 sources:
   - src/pagelore/lib.py
   - tests/test_concurrency.py

@@ -4,6 +4,7 @@ title: "The store logs what happened, and something reads the log"
 kind: decision
 created: 2026-08-17
 updated: 2026-08-17
+checked: 2026-11-04T15:26:47+00:00
 sources:
   - src/pagelore/stats.py
   - src/pagelore/lib.py

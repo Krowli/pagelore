@@ -4,6 +4,7 @@ title: "doctor names a shadowing lore on PATH"
 kind: bug
 created: 2026-09-20
 updated: 2026-09-20
+checked: 2026-11-04T15:25:57+00:00
 sources:
   - src/pagelore/doctor.py
   - tests/test_init.py

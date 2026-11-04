@@ -4,6 +4,7 @@ title: "Retrieval is indistinguishable from Basic Memory, the closest competitor
 kind: decision
 created: 2026-08-18
 updated: 2026-08-18
+checked: 2026-11-04T15:26:54+00:00
 sources:
   - evals/compare_basic_memory.py
 ---

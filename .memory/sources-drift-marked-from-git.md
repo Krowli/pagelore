@@ -3,7 +3,8 @@ slug: sources-drift-marked-from-git
 title: "Sources drift is marked from git commit time, not mtime or updated"
 kind: decision
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-11-04
+checked: 2026-11-04T15:26:54+00:00
 sources:
   - src/pagelore/freshness.py
   - src/pagelore/search.py
@@ -31,7 +32,10 @@ a clone untouched. A source is `changed` when its last commit is strictly newer
 than the *page file's* own last commit. A page and its source landing in the
 same commit read as fresh, not stale — same clock reading, not two — which also
 means the very first commit that adds a page together with the sources it
-describes is never marked, only a source edited after the fact is.
+describes is never marked, only a source edited after the fact is. A `checked`
+time written by `lore confirm` that is newer than the page file's clock replaces
+it in that comparison, so only a source committed after the last confirmation
+marks the page; see [[pages-confirmed-against-code]].
 
 ## No git, no markers
 

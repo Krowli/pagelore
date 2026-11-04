@@ -3,10 +3,11 @@ slug: python3-is-not-a-windows-command
 title: "The hooks were registered as python3, which Windows does not have"
 kind: bug
 created: 2026-08-18
-updated: 2026-08-18
+updated: 2026-11-04
+checked: 2026-11-04T15:30:10+00:00
 sources:
   - install.sh
-  - hooks/hooks.json
+  - npm/bin/lore.js
 ---
 
 ## Cause
@@ -51,3 +52,21 @@ through a shell, which is the only way this class of bug is visible at all.
 `hooks/hooks.json` cannot branch per platform, so the plugin install still
 hard-codes one name. That is a real limitation and it is documented rather than
 hidden. See [[windows-liveness-probe-kills]].
+
+## Since 0.4.0
+
+The fix above is history:
+
+- The hooks are gone ([[scripts-carry-the-contract-not-hooks]]), and `hooks/hooks.json` no longer exists.
+- `install.sh` no longer installs anything ([[installed-command-not-copied-directory]]).
+
+The lesson survived in the npm launcher, `npm/bin/lore.js`, because Windows has no `python3`:
+
+| Platform | Interpreters tried, in order |
+|---|---|
+| Windows | `py -3`, `python`, `python3` |
+| elsewhere | `python3`, `python` |
+
+Each candidate is checked against the 3.9 floor, and the launcher fails with a `FIX:` line when none qualifies.
+
+The pip and pipx routes need no interpreter name: their `lore` console script is generated for the interpreter that installed it.

@@ -3,7 +3,8 @@ slug: fts5-index-is-a-cache
 title: "Search keeps an FTS5 index, and it is a cache the search may ignore"
 kind: decision
 created: 2026-08-17
-updated: 2026-09-19
+updated: 2026-11-04
+checked: 2026-11-04T15:26:53+00:00
 sources:
   - evals/run.py
   - evals/speed.py
@@ -68,7 +69,7 @@ one of these is mandatory and each came from a probe rather than a preference:
 
 The pages are the memory; the index only says which file to open. Every failure —
 missing, corrupt, truncated, wrong schema, unreadable, locked, mid-rebuild — falls
-through to reading the markdown. `PROJECT_MEMORY_NO_FTS5=1` forces that path, and
+through to reading the markdown. `PAGELORE_NO_FTS5=1` forces that path, and
 CI runs the whole suite twice so it cannot rot on machines that all have FTS5.
 
 Two consequences worth knowing. The two paths are different formulas, so the tail

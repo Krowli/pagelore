@@ -4,6 +4,7 @@ title: "Import-graph neighbours for --touching: measured, not built yet"
 kind: decision
 created: 2026-09-27
 updated: 2026-09-27
+checked: 2026-11-04T15:26:54+00:00
 sources:
   - evals/import_probe.py
   - src/pagelore/search.py

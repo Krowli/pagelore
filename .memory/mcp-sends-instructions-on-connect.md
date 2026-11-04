@@ -3,12 +3,13 @@ slug: mcp-sends-instructions-on-connect
 title: "lore mcp sends the block's own paragraphs as its initialize instructions"
 kind: decision
 created: 2026-09-26
-updated: 2026-09-26
+updated: 2026-11-04
+checked: 2026-11-04T15:26:58+00:00
 sources:
+  - evals/mcp_probe.py
+  - src/pagelore/data/AGENT.md
   - src/pagelore/instructions.py
   - src/pagelore/mcp.py
-  - src/pagelore/data/AGENT.md
-  - evals/mcp_probe.py
 ---
 
 ## Decision
@@ -34,9 +35,9 @@ the file an agent reads is unchanged except that one paragraph was split into th
 (same words, same order) so the part that says "this file is not a substitute"
 could be left out of a text that is not a file.
 
-Not the whole block: it is 3.1k characters, most of it shell commands a tool user
+Not the whole block: it is 3.6k characters, most of it shell commands a tool user
 cannot run, and a client puts this text next to every other server's. The derived
-form is 1184 characters. Tests pin both tool names, the bound (≤ 2500), no shell
+form is 1463 characters (1184 when the measurement below was taken). Tests pin both tool names, the bound (≤ 2500), no shell
 command leaking in, and that editing a marked paragraph changes the output.
 
 ## Measured
@@ -51,7 +52,7 @@ command leaking in, and that editing a marked paragraph changes the output.
 | after, with `instructions` | 10/10 (9 of 10 answers named the canvas decision) |
 
 `python3 evals/mcp_probe.py --handshake` shows what arrives without a model: protocol
-2025-06-18, instructions 1184 characters, both tool names present.
+2025-06-18, instructions 1184 characters at the time (1463 now), both tool names present.
 
 The default `lore init` recommends stays the file for now: this is one harness
 version, ten runs per arm, and the file arm has never missed. What would move it is

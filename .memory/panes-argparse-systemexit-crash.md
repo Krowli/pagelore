@@ -4,6 +4,7 @@ title: "Argparse SystemExit killed the panes screen; it is now the turn's rc"
 kind: bug
 created: 2026-09-21
 updated: 2026-09-21
+checked: 2026-11-04T15:26:26+00:00
 sources:
   - src/pagelore/panes.py
   - tests/test_panes.py

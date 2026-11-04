@@ -4,6 +4,7 @@ title: "Dangling [[slug]] links warn; lore show reports backlinks"
 kind: decision
 created: 2026-09-27
 updated: 2026-09-27
+checked: 2026-11-04T15:26:47+00:00
 sources:
   - src/pagelore/lib.py
   - src/pagelore/show.py

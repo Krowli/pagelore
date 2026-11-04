@@ -3,10 +3,11 @@ slug: search-by-touched-file
 title: "Search takes the file being edited, not only words"
 kind: decision
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-11-04
+checked: 2026-11-04T15:26:53+00:00
 sources:
-  - src/pagelore/search.py
   - evals/run.py
+  - src/pagelore/search.py
 ---
 
 ## Context
@@ -22,7 +23,7 @@ came first 38% of the time, nDCG@10 0.545, and words cannot recover it because
 
 ## Decision
 
-`memory_search.py --touching PATH`, repeatable, with or without query words. The
+`lore search --touching PATH`, repeatable, with or without query words. The
 pages citing that file, or anything under that directory, are ordered first —
 by score, recency and slug within the group — and marked `▸ touches <path>` in
 the line and `touching: [...]` in `--json`. A file matches only itself, never

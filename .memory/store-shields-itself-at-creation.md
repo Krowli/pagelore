@@ -3,10 +3,11 @@ slug: store-shields-itself-at-creation
 title: "A store that appears on its own appears private"
 kind: decision
 created: 2026-08-17
-updated: 2026-08-17
+updated: 2026-11-04
+checked: 2026-11-04T15:26:30+00:00
 sources:
-  - src/pagelore/lib.py
   - install.sh
+  - src/pagelore/lib.py
 ---
 
 ## Context
@@ -20,7 +21,7 @@ The store is added to the project's `.gitignore` at the moment it is created, an
 only then. That is the one point where nobody has to remember, and the mistake it
 prevents is one-way: notes pushed to a remote cannot be unpublished. A store that
 already exists is left alone — if the line was removed, that was a decision.
-`install.sh --store tracked` writes a `.tracked` marker so the scripts never
+`lore init --store tracked` writes a `.tracked` marker so the scripts never
 quietly ignore a store meant to be committed.
 
 ## Consequences

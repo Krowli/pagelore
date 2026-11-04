@@ -4,6 +4,7 @@ title: "NFD text was unfindable: combining marks are not word characters"
 kind: bug
 created: 2026-08-17
 updated: 2026-08-17
+checked: 2026-11-04T15:26:54+00:00
 sources:
   - src/pagelore/search.py
 ---

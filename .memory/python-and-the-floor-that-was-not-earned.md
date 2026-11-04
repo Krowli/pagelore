@@ -4,6 +4,7 @@ title: "Why Python, and why the floor is 3.9 rather than 3.11"
 kind: decision
 created: 2026-09-18
 updated: 2026-09-18
+checked: 2026-11-04T15:27:37+00:00
 sources:
   - pyproject.toml
   - install.sh

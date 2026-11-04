@@ -3,7 +3,8 @@ slug: wizard-asks-with-arrows-and-scope
 title: "The wizard asks with arrows, and asks where it applies"
 kind: decision
 created: 2026-09-19
-updated: 2026-09-20
+updated: 2026-11-04
+checked: 2026-11-04T15:28:28+00:00
 sources:
   - src/pagelore/init.py
   - src/pagelore/menu.py
@@ -26,10 +27,11 @@ the same shape of gap on the packaging side.
 
 ## Decision
 
-Three questions, and the first is scope. "This project only" writes into that
+The first question is scope (the wizard asks four questions now: [[mcp-offered-as-a-choice]]
+added how the agent reaches the memory). "This project only" writes into that
 repository's own `CLAUDE.md`, `GEMINI.md` or `AGENTS.md`; "every project" writes into
 the home-directory ones as before. `--scope project` is the same answer for a script,
-and it refuses rather than guessing when there is no repository.
+and it says so and falls back to the global files rather than guessing when there is no repository.
 
 Arrows, space and enter, redrawn in place, on a terminal that can be put into raw
 mode. Everywhere else — a pipe, a CI job, a test driving StringIO — the numbered

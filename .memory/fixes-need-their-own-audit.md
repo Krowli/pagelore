@@ -4,6 +4,7 @@ title: "The first round of fixes introduced three of its own bugs"
 kind: bug
 created: 2026-08-17
 updated: 2026-08-17
+checked: 2026-11-04T15:26:47+00:00
 sources:
   - src/pagelore/write.py
   - src/pagelore/lib.py
