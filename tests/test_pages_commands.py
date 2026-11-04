@@ -57,6 +57,47 @@ def test_rm_of_a_slug_that_is_not_there_is_refused_with_the_search_as_the_fix(po
     assert len(list(populated.glob("*.md"))) == 3, "it deleted something else"
 
 
+# --- confirm -------------------------------------------------------------------
+
+def test_confirm_stamps_checked_and_leaves_updated_and_body_alone(populated, capsys):
+    import datetime
+
+    from pagelore import confirm
+    from pagelore.lib import parse_page
+    path = populated / "command-palette-highlight.md"
+    before = parse_page(path)
+    assert confirm.main(["command-palette-highlight", "--store", str(populated)]) == 0
+    after = parse_page(path)
+    checked = after.meta["checked"]
+    datetime.datetime.fromisoformat(checked)
+    assert checked.endswith("+00:00")
+    assert after.meta["updated"] == before.meta["updated"]
+    assert after.body == before.body
+    assert "confirmed" in capsys.readouterr().out
+    log = (populated / LOG_NAME).read_text(encoding="utf-8")
+    assert '"event": "confirm"' in log and '"slug": "command-palette-highlight"' in log
+
+
+def test_confirm_of_a_slug_that_is_not_there_is_refused_with_the_search_as_the_fix(
+        populated, capsys):
+    from pagelore import confirm
+    assert confirm.main(["nope", "--store", str(populated)]) == 2
+    assert "FIX: lore search" in capsys.readouterr().err
+
+
+def test_confirm_refuses_a_page_whose_source_is_gone(populated, capsys):
+    from pagelore import confirm
+    path = populated / "webgl-context-loss.md"
+    raw = path.read_bytes()
+    assert confirm.main(["webgl-context-loss", "--store", str(populated)]) == 1
+    err = capsys.readouterr().err
+    assert "REJECTED:" in err and "src/terminal/renderer.ts" in err
+    assert "FIX: lore edit webgl-context-loss" in err
+    assert path.read_bytes() == raw
+    log = populated / LOG_NAME
+    assert not log.exists() or '"event": "reject"' not in log.read_text(encoding="utf-8")
+
+
 # --- edit ----------------------------------------------------------------------
 
 @pytest.fixture()

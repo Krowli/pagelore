@@ -6,6 +6,13 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`lore confirm <slug>` marks a page as checked against the code.** It stamps a
+  `checked` time into the page's frontmatter and logs the event, leaving `updated`
+  alone. `⚠ source changed` then fires only for a source committed after that
+  check, so the marker stops sitting on every page of an active project.
+
 ## [0.8.3] - 2026-09-28
 
 ### Added

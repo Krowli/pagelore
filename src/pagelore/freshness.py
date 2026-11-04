@@ -22,6 +22,7 @@ import back into either of the modules that call it.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import posixpath
 import subprocess
 import threading
@@ -213,6 +214,24 @@ def last_commits(root: Path, paths: list[str]) -> dict[str, int] | None:
     return out
 
 
+def checked_at(page: Page) -> int | None:
+    """When someone last checked this page against the code (`lore confirm`), as a
+    Unix time — or None when the page was never checked or the value does not parse.
+
+    A wall-clock time, compared against a source's commit time exactly as the
+    never-committed branch of `drift` already compares a page file's mtime: an
+    explicit check that the page still holds, made after a source moved on, is the
+    one event that should silence the marker for that move.
+    """
+    value = page.meta.get("checked")
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return int(_dt.datetime.fromisoformat(value).timestamp())
+    except ValueError:
+        return None
+
+
 def drift(pages: list[Page], store: Path) -> dict[str, dict[str, list[str]]]:
     """slug -> {"changed": [...], "gone": [...]} for pages whose sources moved on.
 
@@ -235,7 +254,9 @@ def drift(pages: list[Page], store: Path) -> dict[str, dict[str, list[str]]]:
     `changed`: it has no commit time to compare. Uncommitted edits to an already-committed
     source do not move its commit time at all, so they are silently ignored,
     which is the intended behaviour: a page should not flap between marked and
-    unmarked while someone is mid-edit.
+    unmarked while someone is mid-edit. A `checked` time newer than the page
+    file's own clock takes its place, so only a source committed after the last
+    `lore confirm` marks the page.
     """
     root = store.parent
     paths: set[str] = set()
@@ -269,6 +290,9 @@ def drift(pages: list[Page], store: Path) -> dict[str, dict[str, list[str]]]:
                 page_ts = int(page.path.stat().st_mtime)
             except OSError:
                 page_ts = None
+        checked = checked_at(page)
+        if checked is not None and (page_ts is None or checked > page_ts):
+            page_ts = checked
         changed: list[str] = []
         gone: list[str] = []
         for source in page.meta.get("sources") or []:

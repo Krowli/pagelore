@@ -500,3 +500,50 @@ def test_timeout_returns_none_and_kills_git(monkeypatch):
 
     assert freshness.last_commits(Path("."), ["src/a.py"]) is None
     assert fake.returncode == -9  # killed, not merely terminated or let finish
+
+
+# `lore confirm` stamps `checked:`; a source committed before that time no longer
+# marks the page, one committed after it does.
+
+def _checked_setup(repo):
+    store = repo / ".memory"
+    store.mkdir()
+    commit(repo, "src/a.py", "2020-01-01T00:00:00")
+    write_page(store, "p", ["src/a.py"])
+    commit_page(repo, store, "p", "2020-01-02T00:00:00")
+    commit(repo, "src/a.py", "2020-01-03T00:00:00")
+    return store
+
+
+def test_a_confirmed_page_is_not_marked_for_a_source_committed_before_the_check(repo):
+    from pagelore import confirm
+    store = _checked_setup(repo)
+    assert freshness.drift(lib.load_pages(store), store) == \
+        {"p": {"changed": ["src/a.py"], "gone": []}}
+
+    assert confirm.main(["p", "--store", str(store)]) == 0
+    assert freshness.drift(lib.load_pages(store), store) == {}
+
+
+def test_a_source_committed_after_the_check_marks_the_page_again(repo):
+    from pagelore import confirm
+    store = _checked_setup(repo)
+    assert confirm.main(["p", "--store", str(store)]) == 0
+    commit(repo, "src/a.py", "2099-01-01T00:00:00")
+
+    assert "src/a.py" in freshness.drift(lib.load_pages(store), store)["p"]["changed"]
+
+
+def test_an_unreadable_checked_value_is_ignored(repo):
+    import re
+
+    from pagelore import confirm
+    store = _checked_setup(repo)
+    assert confirm.main(["p", "--store", str(store)]) == 0
+    path = store / "p.md"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(re.sub(r"^checked: .*$", "checked: not-a-time", text, flags=re.M),
+                    encoding="utf-8")
+
+    assert freshness.drift(lib.load_pages(store), store) == \
+        {"p": {"changed": ["src/a.py"], "gone": []}}

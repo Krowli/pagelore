@@ -26,7 +26,10 @@ lore search "your query"
 
 Query words are OR'd and ranked, so give several. Open a full page with
 `lore show <slug>`. A hit marked `⚠ superseded by <slug>` was replaced — read the
-replacement first. If nothing relevant comes back, say so rather than guessing.
+replacement first. A hit marked `⚠ source changed` cites a file that moved on after
+the page was written: check the claim against the code before relying on it — still
+true, run `lore confirm <slug>`; wrong, amend the page or replace it with
+`--supersedes`. If nothing relevant comes back, say so rather than guessing.
 
 The trigger is the kind of claim you are about to make, not the wording of the
 question; "how does X work" and "what do you know about this project" are memory

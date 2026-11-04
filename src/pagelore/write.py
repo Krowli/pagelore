@@ -182,7 +182,8 @@ KINDS = ("decision", "bug", "concept", "howto")
 # carries is preserved untouched — rebuilding from a fixed whitelist silently
 # deleted any field a user or a later version added, which blocked the cheapest
 # possible fix for superseded pages.
-MANAGED_SCALARS = ("slug", "title", "kind", "created", "updated", "status", "superseded_by")
+MANAGED_SCALARS = ("slug", "title", "kind", "created", "updated", "checked", "status",
+                   "superseded_by")
 MANAGED_LISTS = ("supersedes", "sources")
 
 

@@ -72,6 +72,7 @@ PICKER_HINTS: dict[str, str] = {
     "write": "write or amend a page",
     "edit": "a page in $EDITOR",
     "rm": "delete one, logged",
+    "confirm": "a page still true, checked",
     "stats": "what the store has been doing",
     "init": "the wizard; --yes to skip it",
     "doctor": "what has gone silently wrong",

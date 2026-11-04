@@ -60,6 +60,8 @@ root, and that root is only known here because git named it.
 for a page that is never committed — the default gitignored store, a `home`
 store, a page not committed yet — with the page file's modification time. A
 clone never creates such a file, so its mtime is the time it was last written.
+`lore confirm <slug>` records that someone checked the page against the code; after
+that only a source committed later marks it again.
 
 ### `lore show <slug>`
 
@@ -230,6 +232,17 @@ lore rm [--store STORE] slug
 ```
 
 Deletes one page and logs it, so `stats` still adds up.
+
+### `lore confirm <slug>`
+
+```
+lore confirm [--store STORE] slug
+```
+
+Records that the page was checked against the code and still holds: stamps
+`checked:` (a UTC time) into its frontmatter and logs it. `⚠ source changed` then
+fires only for a source committed after that time. `updated` is not touched. A page
+with a `⚠ source gone` source is refused, with `lore edit <slug>` as the fix.
 
 ## Setting up
 

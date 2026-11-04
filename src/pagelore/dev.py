@@ -38,7 +38,7 @@ except ImportError:
 from . import __version__
 from .lib import STORE_DIRNAME, find_store
 
-COMMANDS_HINT = "search show list write edit rm stats init doctor uninstall mcp version dev"
+COMMANDS_HINT = "search show list write edit rm confirm stats init doctor uninstall mcp version dev"
 INTERNAL = ("help", "clear", "panes", "exit")
 
 

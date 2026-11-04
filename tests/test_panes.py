@@ -342,7 +342,7 @@ def test_picker_window_scrolls_the_cursor_into_view():
     shown, cur, total, above, below = panes.picker_window(st, 8)
     assert shown[0] == panes.PICKER_COMMANDS[5], "the window slides to keep the cursor visible"
     assert cur == 7 and above and below
-    st.picker_idx = 16
+    st.picker_idx = len(panes.PICKER_COMMANDS) - 1
     shown, cur, total, above, below = panes.picker_window(st, 8)
     assert shown[-1] == panes.PICKER_COMMANDS[-1] and cur == 7 and above and not below
 

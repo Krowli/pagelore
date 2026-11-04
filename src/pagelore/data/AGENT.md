@@ -15,7 +15,7 @@ Durable decisions, contracts and bug post-mortems live as markdown pages in `.me
 lore search "your query"
 ```
 
-Open a full page with `lore show <slug>`. A hit marked `⚠ superseded by <slug>` was replaced — read the replacement first. Add `--touching <path>` to put the pages written against a file you are about to change first. If nothing relevant comes back, say so rather than guessing.
+Open a full page with `lore show <slug>`. A hit marked `⚠ superseded by <slug>` was replaced — read the replacement first. A hit marked `⚠ source changed` cites a file that moved on after the page was written: check the claim against the code before relying on it — still true, run `lore confirm <slug>`; wrong, amend the page or replace it with `--supersedes`. Add `--touching <path>` to put the pages written against a file you are about to change first. If nothing relevant comes back, say so rather than guessing.
 
 <!-- mcp -->
 Put every word you would try — synonyms, the component, the symptom — into one query: the words are OR'd and ranked, so one broad query finds what several narrow ones would. Before changing a file, pass its path as `touching`, so the pages written against that file come first.
