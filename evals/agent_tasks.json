@@ -1,5 +1,5 @@
 {
-  "about": "Tasks for evals/agent_eval.py. Every task rests on pages of evals/corpus.json (the fictional terminal app Zenith); `pages` names them and `files` are created in the project, each at a path some corpus page cites. Phrases match case-insensitively on word boundaries against the agent's normalised final answer (see agent_eval.normalise); `re:` marks a regex. `answer_any` and `obsolete_any` hold only facts the page itself carries, so general knowledge cannot score; a phrase that is derived from the page rather than quoted from it is also listed in `derived`, and tests check every other phrase against the page text.",
+  "about": "Tasks for evals/agent_eval.py. Every task rests on pages of evals/corpus.json (the fictional terminal app Zenith); `pages` names them and `files` are created in the project, each at a path some corpus page cites. Phrases match case-insensitively on word boundaries against the agent's normalised final answer (see agent_eval.normalise); `re:` marks a regex. `answer_any` and `obsolete_any` hold only facts the page itself carries, so general knowledge cannot score; a phrase that is derived from the page rather than quoted from it is also listed in `derived`, and tests check every other phrase against the page text. A `stale` task (G) carries its own `store_pages`, written into the store beside the corpus, and a `history`: the project is committed, then the `history` files are committed over `files`, so the pages citing them read `source changed`; its phrases grade the value the code has now, not a page.",
   "tasks": [
     {
       "id": "A",
@@ -151,6 +151,57 @@
       ],
       "derived": [
         "15 minute"
+      ]
+    },
+    {
+      "id": "G",
+      "kind": "stale",
+      "prompt": "Can a program running in a Zenith pane read or write the system clipboard through OSC 52, and is there a limit on how much it can write? Answer in two or three sentences.",
+      "pages": [],
+      "store_pages": [
+        {
+          "slug": "clipboard-osc52-reads-refused",
+          "title": "OSC 52 clipboard reads are refused; only writes are honoured",
+          "kind": "decision",
+          "sources": [
+            "src/terminal/clipboard/osc52.ts"
+          ],
+          "body": "## Decision\n\nA program in a pane can put text on the system clipboard with OSC 52, but a clipboard read (`ESC ] 52 ; c ; ? BEL`) is never answered: `handleOsc52` returns false for a `?` payload and nothing is written back to the pane.\n\n## Why\n\nA pane may be an ssh session to a machine the user does not control. Answering reads would let any remote program collect whatever the user last copied, most often a password from the password manager. Writes cannot leak anything, and tmux, vim and neovim rely on them to copy over ssh. Rejected: a prompt on every read, because programs poll the clipboard and the prompt would fire constantly.\n"
+        },
+        {
+          "slug": "clipboard-osc52-write-cap",
+          "title": "OSC 52 writes over 100 000 bytes are dropped",
+          "kind": "decision",
+          "sources": [
+            "src/terminal/clipboard/osc52.ts"
+          ],
+          "body": "## Decision\n\nAn OSC 52 write whose decoded payload is longer than `MAX_OSC52_BYTES`, 100 000 bytes, is dropped whole rather than truncated: `handleOsc52` returns false and the clipboard keeps what it had.\n\n## Cause\n\nA runaway `cat` of a binary file inside tmux once pushed 40 MB through OSC 52 and froze the macOS pasteboard server for over a minute. 100 000 bytes covers any selection a person makes by hand. Truncating was rejected: half a selection on the clipboard is worse than the old contents, because the user pastes it without noticing.\n"
+        }
+      ],
+      "files": {
+        "src/terminal/clipboard/osc52.ts": "// OSC 52: a program in the pane asks the terminal to set the system clipboard.\n// The payload is \"<selection>;<base64 data>\", or \"<selection>;?\" to read it back.\n\nexport const MAX_OSC52_BYTES = 100_000;\n\nexport function handleOsc52(payload: string, setClipboard: (text: string) => void): boolean {\n  const [, data = \"\"] = payload.split(\";\", 2);\n  if (data === \"?\") {\n    return false; // reads are never answered\n  }\n  const text = atob(data);\n  if (text.length > MAX_OSC52_BYTES) {\n    return false; // oversized writes are dropped whole, never truncated\n  }\n  setClipboard(text);\n  return true;\n}\n"
+      },
+      "history": {
+        "src/terminal/clipboard/osc52.ts": "// OSC 52: a program in the pane asks the terminal to set the system clipboard.\n// The payload is \"<selection>;<base64 data>\", or \"<selection>;?\" to read it back.\n\n// A full-screen selection of a wide log pane in a 4K window ran past the old cap.\nexport const MAX_OSC52_BYTES = 1_000_000;\n\nexport function handleOsc52(payload: string, setClipboard: (text: string) => void): boolean {\n  const [, data = \"\"] = payload.split(\";\", 2);\n  if (data === \"?\") {\n    return false; // reads are never answered\n  }\n  const text = atob(data);\n  if (text.length > MAX_OSC52_BYTES) {\n    return false; // oversized writes are dropped whole, never truncated\n  }\n  setClipboard(text);\n  return true;\n}\n"
+      },
+      "history_message": "clipboard: raise the OSC 52 write cap",
+      "true_page": "clipboard-osc52-reads-refused",
+      "false_page": "clipboard-osc52-write-cap",
+      "correct_means": "both task pages are marked `source changed`: the code still refuses reads, but the write cap is now 1 000 000 bytes, not the page's 100 000. correct = the answer gives the cap the code has now; confirmed_true / fixed_false / confirmed_false_unfixed read what the agent did to each page from the log",
+      "answer_any": [
+        "re:1[ ,._]?000[ ,._]?000",
+        "re:(one|1) million",
+        "1 mb"
+      ],
+      "derived": [
+        "re:1[ ,._]?000[ ,._]?000",
+        "re:(one|1) million",
+        "1 mb"
+      ],
+      "obsolete_any": [
+        "re:100[ ,._]?000",
+        "100 kb",
+        "re:(one )?hundred thousand"
       ]
     }
   ]

@@ -74,7 +74,7 @@ lore list                                            # every page, newest first
 lore stats                                           # writes, refusals, searches that found nothing
 ```
 
-Or as MCP tools, `memory_search` and `memory_write`, in the agent's tool list:
+Or as MCP tools, `memory_search`, `memory_write` and `memory_confirm`, in the agent's tool list:
 
 ```bash
 lore init --agent claude --via mcp --scope project --yes   # writes .mcp.json
@@ -103,7 +103,7 @@ Claude Code: with the line the agent searched before answering 15 times out of
 
 - [Installation](https://github.com/Krowli/pagelore/blob/main/docs/installation.md) — pipx, pip, uv, npm, from source; upgrading, uninstalling, 0.3.x
 - [Connecting agents](https://github.com/Krowli/pagelore/blob/main/docs/agents.md) — every agent at once, one project, one specific agent
-- [MCP server](https://github.com/Krowli/pagelore/blob/main/docs/mcp.md) — `lore mcp`, its two tools, per-client registration
+- [MCP server](https://github.com/Krowli/pagelore/blob/main/docs/mcp.md) — `lore mcp`, its three tools, per-client registration
 - [CLI reference](https://github.com/Krowli/pagelore/blob/main/docs/cli.md) — every command and flag, exit codes, the write gate, the log
 - [Configuration](https://github.com/Krowli/pagelore/blob/main/docs/configuration.md) — environment variables and files
 - [Troubleshooting](https://github.com/Krowli/pagelore/blob/main/docs/troubleshooting.md) — what each `lore doctor` line means

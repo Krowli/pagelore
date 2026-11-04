@@ -85,10 +85,41 @@ def test_the_instructions_are_read_from_the_block_not_written_twice():
     assert "<!-- mcp" not in instructions.render(), "a marker leaked into the file"
 
 
-def test_tools_list_is_the_two_measured_tools(project):
+def test_tools_list_is_the_three_measured_tools(project):
     tools = mcp.handle(rpc("tools/list"))["result"]["tools"]
-    assert [t["name"] for t in tools] == ["memory_search", "memory_write"]
+    assert [t["name"] for t in tools] == ["memory_search", "memory_write", "memory_confirm"]
     assert all(t["inputSchema"]["type"] == "object" for t in tools)
+
+
+def test_search_says_what_to_do_with_a_page_whose_source_changed():
+    """The file route tells the agent this in the instruction block; a tool user
+    has only the descriptions, so the search tool carries the same rule."""
+    search = next(t for t in mcp.TOOLS if t["name"] == "memory_search")["description"]
+    assert "source changed" in search
+    assert "memory_confirm" in search and "memory_write" in search
+
+
+def test_confirm_over_mcp_stamps_the_page_and_logs_it(project):
+    result = mcp.handle(call("memory_confirm", {"slug": "display-sleep-context-loss"}))["result"]
+    assert result["isError"] is False, result
+    assert "confirmed" in result["content"][0]["text"]
+    page = memory_lib.parse_page(project / ".memory" / "display-sleep-context-loss.md")
+    assert page.meta["checked"].endswith("+00:00")
+    log = (project / ".memory" / memory_lib.LOG_NAME).read_text(encoding="utf-8")
+    assert '"event": "confirm"' in log
+
+
+def test_confirm_of_a_slug_that_is_not_there_is_an_error_with_a_fix_line(project):
+    result = mcp.handle(call("memory_confirm", {"slug": "nope"}))["result"]
+    assert result["isError"] is True
+    assert "FIX:" in result["content"][0]["text"]
+
+
+def test_a_slug_that_looks_like_a_flag_is_a_refusal_not_a_dead_server(project):
+    """The slug reaches argparse as a positional; `-h` there would print help and
+    raise SystemExit, which `handle` does not catch, and the server would exit."""
+    result = mcp.handle(call("memory_confirm", {"slug": "-h"}))["result"]
+    assert result["isError"] is True
 
 
 def test_search_finds_the_page_in_the_store_under_cwd(project):
@@ -191,7 +222,7 @@ def test_stdout_carries_json_lines_and_nothing_else(project):
     assert len(lines) == 2, proc.stdout
     assert [json.loads(line)["id"] for line in lines] == [1, 2]
     assert {t["name"] for t in json.loads(lines[1])["result"]["tools"]} == \
-        {"memory_search", "memory_write"}
+        {"memory_search", "memory_write", "memory_confirm"}
 
 
 def test_startup_says_which_store_it_serves_on_stderr(project):

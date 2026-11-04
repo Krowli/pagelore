@@ -15,7 +15,7 @@ exists:
   a fault, not a neutral state, and this exits non-zero to say so.
 - **An MCP entry the harness cannot start.** The config names a command; if that
   name is not on PATH the server never comes up, and a harness reports that quietly
-  or not at all. And a server that starts must answer `tools/list` with the two
+  or not at all. And a server that starts must answer `tools/list` with the three
   tools — checked by running the very binary the config names, not this install.
 - **A shadowing install.** The `lore` a harness starts is the one its PATH names,
   which may not be the one running this doctor; `--version` prints where each
@@ -84,7 +84,7 @@ def _mcp_registrations(root: Path | None,
 
 
 def _handshake(argv: list[str], timeout: float = 10) -> tuple[bool, str]:
-    """Start `<argv> mcp`, send initialize and tools/list, expect the two tools.
+    """Start `<argv> mcp`, send initialize and tools/list, expect the three tools.
 
     `argv` is the resolved command from the config, so this proves the server the
     harness will actually run — an old install earlier on PATH than this one fails
@@ -107,7 +107,7 @@ def _handshake(argv: list[str], timeout: float = 10) -> tuple[bool, str]:
             return False, f"not a JSON-RPC line on stdout: {line[:80]!r}"
         if message.get("id") == 2:
             names = {t.get("name") for t in (message.get("result") or {}).get("tools", [])}
-    if names == {"memory_search", "memory_write"}:
+    if names == {"memory_search", "memory_write", "memory_confirm"}:
         return True, ", ".join(sorted(names))
     said = proc.stderr.strip().splitlines()
     why = said[0] if said else f"tools/list answered {sorted(n for n in names if n) or 'nothing'}"

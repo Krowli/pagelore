@@ -444,10 +444,12 @@ def test_tasks_rest_on_real_corpus_pages_and_paths():
     pages = {p["slug"]: p for p in corpus["pages"]}
     cited = {s for p in corpus["pages"] for s in p.get("sources") or []}
     tasks = ae.load_tasks()
-    assert [t["id"] for t in tasks] == ["A", "B", "C", "D", "E", "F"]
+    assert [t["id"] for t in tasks] == ["A", "B", "C", "D", "E", "F", "G"]
     for t in tasks:
         assert t["prompt"] and t["kind"] and t["correct_means"]
         assert set(t["pages"]) <= set(pages), t["id"]
+        if t["kind"] == "stale":
+            continue  # its pages and files are its own; checked in the stale tests
         assert set(t["files"]) <= cited, t["id"]
         if "target" in t:
             assert t["target"] in t["files"]
@@ -469,6 +471,8 @@ def test_every_graded_phrase_is_a_fact_of_its_page():
     corpus = json.loads((HERE.parent / "evals" / "corpus.json").read_text(encoding="utf-8"))
     pages = {p["slug"]: ae.normalise(p["title"] + "\n" + p["body"]) for p in corpus["pages"]}
     for t in ae.load_tasks():
+        if t["kind"] == "stale":
+            continue  # graded against code, not a page: test_stale_phrases_*
         derived = set(t.get("derived") or [])
         for phrase in set(t.get("answer_any") or []) - derived:
             if phrase in t["pages"]:
@@ -479,13 +483,96 @@ def test_every_graded_phrase_is_a_fact_of_its_page():
             assert not ae.matches(pages[t["pages"][0]], [phrase]), (t["id"], phrase)
 
 
-# --- projects ------------------------------------------------------------------
+# --- the stale-page task --------------------------------------------------------
 
 POSIX_ONLY = pytest.mark.skipif(
     sys.platform == "win32",
     reason="the harness refuses to build sessions on Windows: the `lore` shim it puts on "
            "the agent's PATH is a POSIX shell script")
 
+
+def stale_task():
+    return next(t for t in ae.load_tasks() if t["kind"] == "stale")
+
+
+def test_the_stale_task_is_self_contained():
+    """Its two pages are not corpus pages, so the retrieval baseline is untouched;
+    both cite the one file whose later commit makes them stale."""
+    task = stale_task()
+    corpus = json.loads((HERE.parent / "evals" / "corpus.json").read_text(encoding="utf-8"))
+    slugs = {p["slug"] for p in corpus["pages"]}
+    own = {p["slug"]: p for p in task["store_pages"]}
+    assert set(own) == {task["true_page"], task["false_page"]}
+    assert not set(own) & slugs
+    assert set(task["history"]) <= set(task["files"])
+    for page in own.values():
+        assert set(page["sources"]) <= set(task["history"]), page["slug"]
+
+
+def test_stale_phrases_cannot_be_earned_from_the_stale_page():
+    """`correct` means the answer carries the value the code has now, which the
+    stale page does not; `obsolete_any` is the page's own value."""
+    task = stale_task()
+    page = next(p for p in task["store_pages"] if p["slug"] == task["false_page"])
+    text = ae.normalise(page["title"] + "\n" + page["body"])
+    assert ae.matches(text, task["obsolete_any"])
+    assert not ae.matches(text, task["answer_any"])
+    later = ae.normalise("\n".join(task["history"].values()))
+    earlier = ae.normalise("\n".join(task["files"].values()))
+    assert later != earlier
+
+
+@POSIX_ONLY
+def test_the_stale_task_marks_exactly_its_two_pages(tmp_path):
+    """The project is a git repository whose last commit changed the file both
+    task pages cite, so `lore search` marks those two and nothing else — every
+    corpus page's sources exist, or the whole result list would read `gone`."""
+    from pagelore import freshness, lib
+    task = stale_task()
+    project, cmd = ae.prepare(tmp_path / "s", "include", task, None)
+    store = project / ".memory"
+    drift = freshness.drift(lib.load_pages(store), store)
+    assert set(drift) == {task["true_page"], task["false_page"]}
+    assert all(not v["gone"] for v in drift.values())
+    status = subprocess.run(["git", "status", "--porcelain"], cwd=project,
+                            capture_output=True, text=True, check=True).stdout
+    assert status == "", status
+    assert "mcp__pagelore__memory_confirm" not in cmd
+
+
+@POSIX_ONLY
+def test_the_mcp_arm_can_confirm(tmp_path):
+    _, cmd = ae.prepare(tmp_path / "m", "mcp", stale_task(), None)
+    assert "mcp__pagelore__memory_confirm" in cmd
+
+
+def test_stale_metrics_read_confirms_and_fixes_from_the_log():
+    task = {"id": "G", "kind": "stale", "true_page": "t", "false_page": "f"}
+    def m(*events):
+        return ae.metrics(task, [], "", list(events))
+    both = m({"event": "confirm", "slug": "t"},
+             {"event": "write", "slug": "f", "mode": "merge"},
+             {"event": "confirm", "slug": "f"})
+    assert (both["confirmed_true"], both["fixed_false"],
+            both["confirmed_false_unfixed"], both["handled_both"]) == (True, True, False, True)
+    lie = m({"event": "confirm", "slug": "t"}, {"event": "confirm", "slug": "f"})
+    assert (lie["fixed_false"], lie["confirmed_false_unfixed"]) == (False, True)
+    replaced = m({"event": "write", "slug": "f-v2", "supersedes": ["f"]})
+    assert replaced["fixed_false"] is True and replaced["confirmed_true"] is False
+    other = ae.metrics({"id": "A", "kind": "why"}, [], "", [])
+    assert other["confirmed_true"] is None and other["handled_both"] is None
+
+
+def test_a_block_file_replaces_the_include_arms_block(tmp_path):
+    block = tmp_path / "old-block.md"
+    block.write_text("# Project memory\n\nAn older block.\n", encoding="utf-8")
+    project, _ = ae.prepare(tmp_path / "b", "include", stale_task(), None,
+                            block=block.read_text(encoding="utf-8"))
+    assert (project / "AGENT.md").read_text(encoding="utf-8") == block.read_text(
+        encoding="utf-8")
+
+
+# --- projects ------------------------------------------------------------------
 
 def dry_run(tmp_path, monkeypatch, capsys, *extra):
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))

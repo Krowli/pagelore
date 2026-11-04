@@ -41,6 +41,7 @@ from io import StringIO
 from pathlib import Path
 
 from . import __version__, instructions
+from . import confirm as memory_confirm
 from . import search as memory_search
 from . import write as memory_write
 from .cli import add_version
@@ -64,7 +65,10 @@ TOOLS = [
             "stating anything about this project — what it is, what it does, how a part "
             "works, why it is that way, what was decided or rejected — and before "
             "changing an unfamiliar subsystem. A hit marked 'superseded by' was replaced; "
-            "read the replacement first."
+            "read the replacement first. A hit marked 'source changed' cites a file that "
+            "moved on after the page was written: check the claim against the code before "
+            "relying on it — still true, call memory_confirm; wrong, amend it with "
+            "memory_write."
         ),
         "inputSchema": {
             "type": "object",
@@ -105,6 +109,23 @@ TOOLS = [
                                "description": "Slugs this page replaces."},
             },
             "required": ["slug", "title", "kind", "sources", "body"],
+        },
+    },
+    {
+        "name": "memory_confirm",
+        "title": "Confirm a page still holds",
+        "description": (
+            "Record that a page was checked against the code and still holds, so it "
+            "stops being marked 'source changed' until a source is committed again. Use "
+            "only after verifying the page's claim against the current code; when the "
+            "claim is wrong, amend the page with memory_write instead."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string", "description": "As the search hit printed it."},
+            },
+            "required": ["slug"],
         },
     },
 ]
@@ -160,6 +181,18 @@ def do_write(args: dict, store: Path) -> tuple[str, bool]:
     return text or ("written" if code == 0 else "refused"), code != 0
 
 
+def do_confirm(args: dict, store: Path) -> tuple[str, bool]:
+    """Through `lore confirm`'s own entry point, as `do_write` goes through
+    `lore write`'s. `--` before the slug: it is a positional, and a slug that looks
+    like a flag (`-h`) would otherwise make argparse print help and raise
+    SystemExit, which `handle` does not catch — the server would exit."""
+    out, err = StringIO(), StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        code = memory_confirm.main(["--store", str(store), "--", str(args.get("slug", ""))])
+    text = (out.getvalue() + err.getvalue()).strip()
+    return text or ("confirmed" if code == 0 else "refused"), code != 0
+
+
 def handle(message: dict, store: Path | None = None) -> dict | None:
     """One request in, one reply out — or None for a notification."""
     method, mid = message.get("method"), message.get("id")
@@ -178,7 +211,8 @@ def handle(message: dict, store: Path | None = None) -> dict | None:
     if method == "tools/call":
         params = message.get("params") or {}
         name, args = params.get("name"), params.get("arguments") or {}
-        runner = {"memory_search": do_search, "memory_write": do_write}.get(name)
+        runner = {"memory_search": do_search, "memory_write": do_write,
+                  "memory_confirm": do_confirm}.get(name)
         if runner is None:
             return {"jsonrpc": "2.0", "id": mid,
                     "error": {"code": -32602, "message": f"Unknown tool: {name}"}}

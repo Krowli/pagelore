@@ -122,11 +122,12 @@ TASKS = HERE / "agent_tasks.json"
 # Bumped whenever `metrics` or a task's phrases change what a session scores.
 # Every record carries it, and `--summarize` re-scores every record with the
 # current rules anyway, so two files are never compared under two rulebooks.
-SCORING_VERSION = 3
+SCORING_VERSION = 4
 ARMS = ("include", "mcp")
 TIMEOUT = 600
 BASE_TOOLS = ["Bash(lore:*)", "Read", "Edit", "Write", "Grep", "Glob"]
-MCP_TOOLS = ["mcp__pagelore__memory_search", "mcp__pagelore__memory_write"]
+MCP_TOOLS = ["mcp__pagelore__memory_search", "mcp__pagelore__memory_write",
+             "mcp__pagelore__memory_confirm"]
 SEARCH_TOOL = "mcp__pagelore__memory_search"
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "awk", "bat"}
@@ -138,7 +139,9 @@ PAGE_PATH = ".memory/some-page.md"
 RATES = [("searched", "searched"), ("correct", "correct"),
          ("endorses_obsolete", "obsolete"), ("searched_before_edit", "srch<edit"),
          ("used_touching", "touching"), ("wrote_page", "wrote"),
-         ("grep_memory", "grep_mem"), ("read_memory_file", "read_mem")]
+         ("grep_memory", "grep_mem"), ("read_memory_file", "read_mem"),
+         ("confirmed_true", "conf_true"), ("fixed_false", "fix_false"),
+         ("confirmed_false_unfixed", "conf_false!")]
 # Per-session numbers compared by medians (Mann-Whitney U) across two files.
 NUMBERS = ["n_searches", "repeats", "num_turns", "total_cost_usd"]
 
@@ -464,6 +467,7 @@ def metrics(task: dict, tools: list[dict], answer: str, events: list[dict],
         correct = abstained
     else:
         correct = None
+    stale = stale_metrics(task, events)
     return {
         "searched": bool(searches),
         "n_searches": len(searches),
@@ -482,7 +486,27 @@ def metrics(task: dict, tools: list[dict], answer: str, events: list[dict],
         # History next to the current decision is fine; the old decision alone
         # is the answer the superseded marker exists to prevent.
         "endorses_obsolete": None if obsolete is None else bool(obsolete and not current),
+        **stale,
     }
+
+
+def stale_metrics(task: dict, events: list[dict]) -> dict:
+    """What the agent did to the two marked pages of a `stale` task, from the log:
+    the true one should be confirmed, the false one amended or superseded. A confirm
+    of the false page without a fix is the case the marker exists to prevent —
+    the page now claims to have been checked and is still wrong. None elsewhere."""
+    if task.get("kind") != "stale":
+        return {k: None for k in ("confirmed_true", "fixed_false",
+                                  "confirmed_false_unfixed", "handled_both")}
+    confirmed = {e.get("slug") for e in events if e.get("event") == "confirm"}
+    written = [e for e in events if e.get("event") == "write" and e.get("mode") != "unchanged"]
+    fixed = ({e.get("slug") for e in written}
+             | {s for e in written for s in (e.get("supersedes") or [])})
+    true_ok = task["true_page"] in confirmed
+    false_ok = task["false_page"] in fixed
+    return {"confirmed_true": true_ok, "fixed_false": false_ok,
+            "confirmed_false_unfixed": task["false_page"] in confirmed and not false_ok,
+            "handled_both": true_ok and false_ok}
 
 
 # --- statistics ------------------------------------------------------------------
@@ -799,9 +823,51 @@ def agent_command(prompt: str, mcp_config: Path, tools: list[str], model: str | 
     return [*cmd, "--allowedTools", *tools]
 
 
-def prepare(directory: Path, arm: str, task: dict, model: str | None) -> tuple[Path, list[str]]:
+def stage_history(project: Path, task: dict) -> None:
+    """Make a `stale` task's two pages read `source changed`: write them, give every
+    cited source a file so no page reads `gone`, commit it all, then commit the
+    task's `history` over its `files`. Dates are fixed and in the past, so a
+    `lore confirm` in the session is always newer than the change it vouches for."""
+    sys.path.insert(0, str(REPO / "src"))
+    from run import load_corpus
+
+    from pagelore import write as memory_write
+
+    store = project / ".memory"
+    for page in task["store_pages"]:
+        memory_write.write_page(store, page["slug"], page["title"], page["kind"],
+                                page["sources"], page["body"])
+    cited = {s for p in load_corpus()["pages"] for s in p.get("sources") or []}
+    parents = {str(Path(s).parents[i]) for s in cited for i in range(len(Path(s).parts) - 1)}
+    for rel in sorted(cited):
+        path = project / rel
+        if rel in parents:
+            path.mkdir(parents=True, exist_ok=True)
+        elif not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("placeholder: a file the evaluation corpus cites\n",
+                            encoding="utf-8")
+
+    def commit(message: str, when: str) -> None:
+        env = {**os.environ, "GIT_AUTHOR_DATE": when, "GIT_COMMITTER_DATE": when}
+        git = ["git", "-c", "user.name=eval", "-c", "user.email=eval@example.invalid",
+               "-c", "commit.gpgsign=false"]
+        subprocess.run([*git, "add", "-A"], cwd=project, check=True, env=env)
+        subprocess.run([*git, "commit", "-q", "-m", message], cwd=project, check=True,
+                       env=env)
+
+    commit("the project as the pages describe it", "2026-01-01T00:00:00")
+    for rel, text in task["history"].items():
+        (project / rel).write_text(text, encoding="utf-8")
+    commit(task.get("history_message") or "a later change", "2026-02-01T00:00:00")
+
+
+def prepare(directory: Path, arm: str, task: dict, model: str | None,
+            block: str | None = None) -> tuple[Path, list[str]]:
     directory.mkdir(parents=True)
-    project = build_project(directory, arm, task.get("files") or {})
+    project = build_project(directory, arm, task.get("files") or {}, block=block)
+    if task.get("history"):
+        stage_history(project, task)
     if arm == "include":
         mcp_config = directory / "empty-mcp.json"
         mcp_config.write_text(json.dumps({"mcpServers": {}}) + "\n", encoding="utf-8")
@@ -880,12 +946,14 @@ def _git(*args) -> str:
         return ""
 
 
-def header(args, lore_line: str, claude_version: str) -> dict:
+def header(args, lore_line: str, claude_version: str, block: str | None = None) -> dict:
     return {"type": "header", "date": _dt.datetime.now().isoformat(timespec="seconds"),
             "label": args.label, "pagelore": __version__, "lore": lore_line,
             "git": _git("rev-parse", "--short", "HEAD"),
             "dirty": bool(_git("status", "--porcelain")),
-            "block_sha": hashlib.sha256(instructions.render().encode()).hexdigest()[:12],
+            "block_sha": hashlib.sha256(
+                (instructions.render() if block is None else block).encode()).hexdigest()[:12],
+            "block_file": args.block,
             "claude": claude_version, "arms": args.arms, "tasks": args.tasks,
             "runs": args.runs, "models": args.models, "timeout": args.timeout,
             "enable_tool_search": os.environ.get("ENABLE_TOOL_SEARCH"),
@@ -912,7 +980,12 @@ def main(argv=None) -> int:
     ap.add_argument("--summarize", nargs="+", metavar="FILE",
                     help="summarize one results file, or compare two")
     ap.add_argument("--json", action="store_true", help="the summary as JSON")
+    ap.add_argument("--block", metavar="FILE",
+                    help="the include arm reads this rendered block instead of this tree's "
+                         "(e.g. `git show <ref>:AGENTS.md > old.md`), to measure a wording "
+                         "against the current one; its hash is in the header")
     args = ap.parse_args(argv)
+    block = Path(args.block).read_text(encoding="utf-8") if args.block else None
 
     if args.summarize:
         if len(args.summarize) > 2:
@@ -961,7 +1034,7 @@ def main(argv=None) -> int:
                                         timeout=60).stdout.strip()
         out.parent.mkdir(parents=True, exist_ok=True)
         with out.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(header(args, lore_line, claude_version)) + "\n")
+            fh.write(json.dumps(header(args, lore_line, claude_version, block)) + "\n")
         print(f"claude     {claude_version}\nout        {out}")
 
     # Runs outer, then tasks, models, arms: the cells being compared sit close in time.
@@ -969,7 +1042,7 @@ def main(argv=None) -> int:
         for tid, (mi, model), arm in itertools.product(wanted, enumerate(models), arms):
             task = by_id[tid]
             directory = root / f"{arm}-{tid}-{mi}-{run}"
-            project, cmd = prepare(directory, arm, task, model)
+            project, cmd = prepare(directory, arm, task, model, block=block)
             if args.dry_run:
                 print(f"{arm} {tid} {project}")
                 print("$ " + shlex.join(cmd))
@@ -989,7 +1062,7 @@ def main(argv=None) -> int:
                       **metrics(task, parsed["tools"], answer, events, str(project)),
                       "answer": answer, "tools": parsed["tools"],
                       "log": [e for e in events if e.get("event") in
-                              ("search", "write", "reject")]}
+                              ("search", "write", "reject", "confirm")]}
             if done["exit_code"] != 0:
                 record["stderr_tail"] = done["stderr"][-2000:]
             with out.open("a", encoding="utf-8") as fh:
@@ -999,6 +1072,9 @@ def main(argv=None) -> int:
                   f"repeats={record['repeats']} correct={record['correct']} "
                   f"before_edit={record['searched_before_edit']} "
                   f"wrote={record['wrote_page']} ${record['total_cost_usd']} "
+                  + (f"conf_true={record['confirmed_true']} fix_false={record['fixed_false']} "
+                     f"conf_false!={record['confirmed_false_unfixed']} "
+                     if task["kind"] == "stale" else "") +
                   f"{done['elapsed_s']}s", flush=True)
             if not args.keep:
                 shutil.rmtree(directory, ignore_errors=True)

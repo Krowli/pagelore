@@ -77,7 +77,7 @@ PICKER_HINTS: dict[str, str] = {
     "init": "the wizard; --yes to skip it",
     "doctor": "what has gone silently wrong",
     "uninstall": "take the memory out",
-    "mcp": "the memory as two MCP tools",
+    "mcp": "the memory as MCP tools",
     "version": "pagelore version",
     "dev": "the console commands",
     "help": "the command list",

@@ -10,8 +10,8 @@ There are two routes, and you can use both:
   include a file, the block's text — in the file the agent reads every turn. It
   tells the agent to run `lore search` before stating anything about the project
   and `lore write` after a decision or a non-obvious fix.
-- **An MCP server.** `lore mcp` puts `memory_search` and `memory_write` in the
-  agent's tool list. See [MCP](mcp.md).
+- **An MCP server.** `lore mcp` puts `memory_search`, `memory_write` and
+  `memory_confirm` in the agent's tool list. See [MCP](mcp.md).
 
 You can set this up for every agent on the machine, for one project, or for one
 specific agent. The client configuration below was checked against each client's
@@ -158,12 +158,14 @@ the server registered as `pagelore` (`lore init --via mcp`):
 ---
 name: archivist
 description: Answers "why is it like this" questions about this project from its recorded decisions, and records new ones. Use before changing an unfamiliar subsystem.
-tools: Read, Grep, Glob, mcp__pagelore__memory_search, mcp__pagelore__memory_write
+tools: Read, Grep, Glob, mcp__pagelore__memory_search, mcp__pagelore__memory_write, mcp__pagelore__memory_confirm
 ---
 
 Search project memory with memory_search before stating anything about this
 project. Give several words; they are OR'd and ranked. A hit marked
-"superseded by <slug>" was replaced — read the replacement first. If nothing
+"superseded by <slug>" was replaced — read the replacement first. A hit marked
+"source changed" cites a file that moved on: check the claim against the code —
+still true, call memory_confirm; wrong, amend it with memory_write. If nothing
 relevant comes back, say so rather than guessing.
 
 After an architectural decision, a non-obvious bugfix or a contract change, record

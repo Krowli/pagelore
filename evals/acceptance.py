@@ -76,9 +76,11 @@ QUESTION = ("This project's terminal does not use the graphics card to draw by d
 RELEVANT = "render-canvas-default-renderer"
 
 
-def build_project(directory: Path, pointer: str, files: dict[str, str] | None = None) -> Path:
+def build_project(directory: Path, pointer: str, files: dict[str, str] | None = None,
+                  block: str | None = None) -> Path:
     """`files` maps project-relative paths to contents, for a task that needs a real
-    file to edit or cite — `lore write --source` refuses a path that does not exist."""
+    file to edit or cite — `lore write --source` refuses a path that does not exist.
+    `block` replaces this tree's rendered block, to measure an older wording."""
     project = directory / "project"
     project.mkdir()
     (project / "src").mkdir()
@@ -90,7 +92,7 @@ def build_project(directory: Path, pointer: str, files: dict[str, str] | None = 
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     harness.materialise(harness.load_corpus()["pages"], project)
 
-    block = instructions.render()
+    block = instructions.render() if block is None else block
     if pointer == "paste":
         (project / "CLAUDE.md").write_text(block, encoding="utf-8")
         (project / "AGENTS.md").write_text(block, encoding="utf-8")

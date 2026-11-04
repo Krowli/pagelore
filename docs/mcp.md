@@ -1,6 +1,6 @@
 # MCP server
 
-`lore mcp` serves the same memory as two MCP tools over stdio. The tools call the
+`lore mcp` serves the same memory as three MCP tools over stdio. The tools call the
 functions the commands call — same ranking, same write gate, same `FIX:` lines —
 so retrieval quality cannot differ between the two routes. It is standard library
 only, like the rest of the program.
@@ -11,10 +11,12 @@ only, like the rest of the program.
 |---|---|---|
 | `memory_search` | `query` (string; several words, OR'd and ranked), `touching` (array of file or directory paths; pages written against them first), `limit` (integer, default 10) | Same as `lore search` |
 | `memory_write` | `slug`, `title`, `kind` (`decision` \| `bug` \| `concept` \| `howto`), `sources` (array of paths that exist), `body` (markdown, `## ` sections) — all required; `supersedes` (array of slugs) | Same as `lore write`; a refusal comes back as an error result carrying the reason and the `FIX:` line |
+| `memory_confirm` | `slug` (required) | Same as `lore confirm`: records that the page was checked against the code and still holds, so `source changed` marks it again only after a later source commit; a page with a gone source is refused with the `FIX:` line |
 
 The tool descriptions carry the same trigger as the instruction block — search
 before stating anything about the project, write after a decision or a
-non-obvious fix — because the two routes were compared on that promise.
+non-obvious fix, check a `source changed` hit against the code and confirm or
+amend it — because the two routes were compared on that promise.
 
 Protocol details: JSON-RPC 2.0, one message per line on stdin and stdout,
 protocol version `2025-06-18`, server name `pagelore`. stdout carries
@@ -104,7 +106,8 @@ Claude Code asks once, in an interactive session, before it uses a project's
 `.mcp.json` servers; approve it there (`/mcp` shows the state).
 
 In tool lists the tools appear under the client's own prefix — in Claude Code
-`mcp__pagelore__memory_search` and `mcp__pagelore__memory_write`, in
+`mcp__pagelore__memory_search`, `mcp__pagelore__memory_write` and
+`mcp__pagelore__memory_confirm`, in
 Gemini CLI `mcp_pagelore_memory_search` and so on.
 
 Before 0.6.0 the server was registered as `project-memory`. `lore init --via mcp`

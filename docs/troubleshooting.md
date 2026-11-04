@@ -50,7 +50,7 @@ Checked in: the project's `.mcp.json`, then `~/.claude.json` (top-level
 | `ok  Claude Code: MCP server in … → lore mcp` | Registered, and the command is on PATH. | — |
 | `ok  …: MCP server in … (command not readable)` | Registered; the command could not be read out of the file. | — |
 | `FAIL  …: MCP server in … → lore mcp — but lore is not on PATH; the harness cannot start it` | The client will fail to start the server, quietly. | Put the install on PATH (`pipx ensurepath`), or re-register with `lore init --command pagelore …` if that is the name you have |
-| `ok  … mcp answers tools/list with memory_search, memory_write` | The server the config names starts and lists both tools. | — |
+| `ok  … mcp answers tools/list with memory_confirm, memory_search, memory_write` | The server the config names starts and lists all three tools. | — |
 | `FAIL  Claude Code: MCP server still registered as project-memory in …` | The pre-0.6.0 server name. It still starts, but an agent given it beside `pagelore` sees every tool twice. | `lore init --via mcp` replaces an entry it wrote; `lore uninstall` removes it; an entry you edited, rename by hand |
 | `FAIL  … mcp did not answer tools/list: …` | The binary the config names is not a working server — often an old install earlier on PATH. | Check `lore --version`; remove the older install |
 
