@@ -220,7 +220,7 @@ the MCP edit-task gap remains the open problem. Repeats did not move in any run.
 ## Stale pages: does the agent check them
 
 `⚠ source changed` marks a page whose cited file was committed after it.
-`lore confirm` (unreleased, after 0.8.3) records that a page was checked against the code. The
+`lore confirm` (0.8.4) records that a page was checked against the code. The
 instruction block now says what to do with the marker: check the claim; if it
 still holds, `lore confirm`; if it is wrong, amend or `--supersedes`.
 
