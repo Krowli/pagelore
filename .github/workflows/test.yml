@@ -167,7 +167,7 @@ jobs:
           printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
                         '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | lore mcp > out.jsonl
           python -c "import json,sys; ls=[json.loads(l) for l in open('out.jsonl') if l.strip()]; \
-            assert len(ls)==2, ls; assert {t['name'] for t in ls[1]['result']['tools']}=={'memory_search','memory_write'}, ls"
+            assert len(ls)==2, ls; assert {t['name'] for t in ls[1]['result']['tools']}=={'memory_search','memory_write','memory_confirm'}, ls"
 
           # The round trip through tools/call: a valid write lands a real page,
           # a search finds it back, and a credential-shaped body is refused with

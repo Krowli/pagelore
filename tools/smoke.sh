@@ -92,7 +92,7 @@ step "the MCP server answers tools/list, and init, doctor and uninstall know it"
 import json, sys
 ls = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
 assert len(ls) == 2, ls
-assert {t['name'] for t in ls[1]['result']['tools']} == {'memory_search', 'memory_write'}, ls
+assert {t['name'] for t in ls[1]['result']['tools']} == {'memory_search', 'memory_write', 'memory_confirm'}, ls
 print(f"   tools/list answered {sorted(t['name'] for t in ls[1]['result']['tools'])}")
 PY
 
